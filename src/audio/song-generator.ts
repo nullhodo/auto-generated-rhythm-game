@@ -12,6 +12,41 @@ export function midiToFreq(m: number): number {
   return 440 * 2 ** ((m - 69) / 12);
 }
 
+/**
+ * ユークリッドリズム（Bjorklundアルゴリズム）生成関数
+ * steps（分割数）の中に hits（発音数）を可能な限り均等に分散配置する
+ */
+export function euclideanPattern(
+  hits: number,
+  steps: number,
+  rotate = 0,
+): boolean[] {
+  if (hits <= 0) return new Array(steps).fill(false);
+  if (hits >= steps) return new Array(steps).fill(true);
+
+  // Bresenham型累積誤差アルゴリズム（頭出し安定版）
+  const pattern: boolean[] = new Array(steps).fill(false);
+  let accumulator = 0;
+  for (let i = 0; i < steps; i++) {
+    accumulator += hits;
+    if (accumulator >= steps) {
+      accumulator -= steps;
+      pattern[i] = true;
+    }
+  }
+
+  // 1拍目 (index 0) にアタックが来るよう正規化・回転
+  const firstTrue = pattern.indexOf(true);
+  const normalized =
+    firstTrue > 0
+      ? pattern.slice(firstTrue).concat(pattern.slice(0, firstTrue))
+      : pattern;
+
+  if (rotate === 0) return normalized;
+  const r = ((rotate % steps) + steps) % steps;
+  return normalized.slice(r).concat(normalized.slice(0, r));
+}
+
 const ROOT_NOTES = [57, 59, 60, 62, 64]; // A3, B3, C4, D4, E4
 
 const KEY_DETAILS: Record<number, { keyName: string; chords: string[] }> =
@@ -100,6 +135,35 @@ const BUILDUP_STYLES: BuildupStyleType[] = [
   "syncopated-tease",
   "half-time",
   "riser-rush",
+];
+
+interface BassGrooveStyle {
+  label: string;
+  hitsVerse: number;
+  hitsChorus: number;
+}
+
+const BASS_GROOVE_STYLES: BassGrooveStyle[] = [
+  {
+    label: "Tres Groove (E(3,8) 跳ねるラテン・EDM)",
+    hitsVerse: 3,
+    hitsChorus: 5,
+  },
+  {
+    label: "Driving 4-Floor (E(4,8) 王道ストレート)",
+    hitsVerse: 4,
+    hitsChorus: 6,
+  },
+  {
+    label: "Syncopated Clave (E(5,8) ノリノリファンク)",
+    hitsVerse: 5,
+    hitsChorus: 6,
+  },
+  {
+    label: "Garage Roll (E(5,8) -> E(7,8) 疾走ビート)",
+    hitsVerse: 5,
+    hitsChorus: 7,
+  },
 ];
 
 /**
@@ -201,12 +265,16 @@ function createMelodyPhrase(
 
     switch (style) {
       case "arpeggio": {
-        // 1. 疾走アルペジオ: 8分音符でコードトーンを階段状に駆け上がる流麗シーケンス
-        for (let sub = 0; sub < 7; sub++) {
+        // 1. 疾走アルペジオ: 表拍 (0, 2, 4, 6) を軸にし、後半で軽快に駆け上がる
+        // (初心者がついていけない8分音符7連打を解消し、4分音符主体+駆け上がりに最適化)
+        const arpSubs =
+          bar % 2 === 0 ? [0, 2, 4, 5, 6] : [0, 2, 4, 6];
+        for (let idx = 0; idx < arpSubs.length; idx++) {
+          const sub = arpSubs[idx];
           const toneIdx =
-            chordTones[chosenArpPattern[sub] % chordTones.length] +
-            (sub >= 4 ? 4 : 0);
-          const isLong = bar === 3 && sub === 4;
+            chordTones[chosenArpPattern[idx] % chordTones.length] +
+            (idx >= 3 ? 3 : 0);
+          const isLong = bar === 3 && idx === arpSubs.length - 1;
           notes.push({
             subBeat: bar * 8 + sub,
             scaleToneIndex: Math.max(0, Math.min(9, toneIdx)),
@@ -217,12 +285,12 @@ function createMelodyPhrase(
       }
 
       case "anthem": {
-        // 2. 王道アンセム: 1拍目に力強いロングトーンを提示し、後半で応答するコール＆レスポンス
+        // 2. 王道アンセム: 1拍目に力強いロングトーンを提示し、表拍で力強く応答
         const anthemSubs =
           bar % 2 === 0
             ? [
                 { sub: 0, long: true, tone: chordTones[0] + 3 },
-                { sub: 3, long: false, tone: chordTones[1] + 1 },
+                { sub: 2, long: false, tone: chordTones[1] },
                 { sub: 4, long: false, tone: chordTones[2] },
                 { sub: 6, long: true, tone: chordTones[0] + 2 },
               ]
@@ -244,8 +312,9 @@ function createMelodyPhrase(
       }
 
       case "syncopated": {
-        // 3. シンコペーション・バウンス: 表拍を抜いて裏拍で飛び跳ねるダンサブルなグルーヴ
-        const synSubs = [1, 2, 4, 5, 7];
+        // 3. シンコペーション・バウンス: 1拍目はしっかり表拍(0)でキックに合わせて打たせ、
+        // 後半(5)で1音だけ跳ねるアクセントを付与 (唐突な裏拍スタートの叩きづらさを完全解消)
+        const synSubs = [0, 2, 4, 5, 6];
         for (let idx = 0; idx < synSubs.length; idx++) {
           const sub = synSubs[idx];
           const tone =
@@ -262,13 +331,13 @@ function createMelodyPhrase(
       }
 
       case "cascade": {
-        // 4. カスケード下降: 高音の頂点から階段状に美しく駆け下りてくるドラマチックな旋律
-        const cascadeSubs = [0, 2, 3, 4, 6];
+        // 4. カスケード下降: 表拍 (0, 2, 4, 6) を基本とした階段状の美しい旋律線
+        const cascadeSubs = [0, 2, 4, 6];
         for (let idx = 0; idx < cascadeSubs.length; idx++) {
           const sub = cascadeSubs[idx];
           const tone = Math.max(
             0,
-            cascadeTopTone - idx + (bar % 2 === 0 ? 0 : -1),
+            cascadeTopTone - idx * 2 + (bar % 2 === 0 ? 0 : -1),
           );
           const isLong = idx === cascadeSubs.length - 1;
           notes.push({
@@ -281,13 +350,12 @@ function createMelodyPhrase(
       }
 
       case "staccato": {
-        // 5. クラブスタッカート: 同音をト・ト・トと連打し、小節末尾で跳躍するキャッチーなクラブフック
+        // 5. クラブスタッカート: 表拍のノリ (0, 2, 4, 6) で同音を小気味よく刻み、ラストで跳躍
         const baseTone = chordTones[bar % chordTones.length];
-        const staccatoSubs = [0, 1, 2, 4, 5, 6];
+        const staccatoSubs = [0, 2, 4, 5, 6];
         for (let idx = 0; idx < staccatoSubs.length; idx++) {
           const sub = staccatoSubs[idx];
-          // 最後の音でオクターブまたは5度上にジャンプ！
-          const tone = idx >= 4 ? baseTone + staccatoJump : baseTone;
+          const tone = idx >= 3 ? baseTone + staccatoJump : baseTone;
           const isLong = idx === staccatoSubs.length - 1;
           notes.push({
             subBeat: bar * 8 + sub,
@@ -389,6 +457,10 @@ export function generateSong(
   const buildupStyleIndex = Math.floor(rng() * BUILDUP_STYLES.length);
   const chosenBuildupStyle = BUILDUP_STYLES[buildupStyleIndex];
 
+  // ★ ベースグルーヴ（ユークリッドリズム）をランダム選定 ★
+  const bassGrooveIndex = Math.floor(rng() * BASS_GROOVE_STYLES.length);
+  const chosenBassGroove = BASS_GROOVE_STYLES[bassGrooveIndex];
+
   const meta: SongMeta = {
     keyName: keyDetail.keyName,
     scaleName: "Natural Minor",
@@ -426,7 +498,16 @@ export function generateSong(
     const chordTones = CHORDS[degree];
     const chordRootMidi = scaleExt[chordTones[0]];
 
-    // ドラム・ベース・コードの生成 (各拍)
+    // ★ ユークリッドリズムによるベース＆ハイハットパターンの決定 ★
+    const bassHits = isChorus
+      ? chosenBassGroove.hitsChorus
+      : chosenBassGroove.hitsVerse;
+    const bassPattern = euclideanPattern(bassHits, 8);
+    const hatPattern = isChorus
+      ? euclideanPattern(6, 8, 1)
+      : euclideanPattern(4, 8, 1);
+
+    // 1. ドラム (キック・スネア) & コード (各拍)
     for (let beat = 0; beat < 4; beat++) {
       const t = currentTime + beat * beatTime;
 
@@ -459,16 +540,8 @@ export function generateSong(
             played: false,
           });
         }
-        if (beat % 2 === 0) {
-          songData.push({
-            type: "sound",
-            soundType: "hat",
-            time: t,
-            played: false,
-          });
-        }
       } else {
-        // 3. 通常の4つ打ち、または syncopated-tease / riser-rush
+        // 3. 通常の4つ打ちキック
         songData.push({
           type: "sound",
           soundType: "kick",
@@ -500,13 +573,6 @@ export function generateSong(
             played: false,
           });
         }
-
-        songData.push({
-          type: "sound",
-          soundType: "hat",
-          time: t + beatTime / 2,
-          played: false,
-        });
       }
 
       // コード（和音バッキング）: 小節頭およびサビの2拍目
@@ -520,37 +586,63 @@ export function generateSong(
           played: false,
         });
       }
+    }
 
-      // ベース (breakdown時は鳴らさない)
+    // 2. ユークリッドリズムによるハイハット & ベース (8サブビート単位)
+    for (let sub = 0; sub < 8; sub++) {
+      const subTime = currentTime + sub * subBeatTime;
+
+      // ハイハット生成 (breakdown時、またはhalf-time時は専用ビート)
+      if (isBuildUp && chosenBuildupStyle === "breakdown") {
+        // ブレイクダウン時はハイハットなし
+      } else if (isBuildUp && chosenBuildupStyle === "half-time") {
+        if (sub % 4 === 0) {
+          songData.push({
+            type: "sound",
+            soundType: "hat",
+            time: subTime,
+            played: false,
+          });
+        }
+      } else {
+        if (hatPattern[sub]) {
+          songData.push({
+            type: "sound",
+            soundType: "hat",
+            time: subTime,
+            played: false,
+          });
+        }
+      }
+
+      // ベース生成 (breakdown時は鳴らさない)
       if (!(isBuildUp && chosenBuildupStyle === "breakdown")) {
         if (isBuildUp && chosenBuildupStyle === "half-time") {
-          if (beat === 0 || beat === 2) {
+          // ハーフタイム時は2拍に1回の重厚ロングベース
+          if (sub === 0 || sub === 4) {
             songData.push({
               type: "sound",
               soundType: "bass",
-              time: t,
+              time: subTime,
               note: chordRootMidi - 24,
               played: false,
             });
           }
-        } else {
+        } else if (bassPattern[sub]) {
+          // ユークリッドリズムでファンキーに発音
+          // サビの後半アクセントヒットでは、オクターブ上の跳躍を織り交ぜて躍動感を演出
+          const isJumpHit = isChorus && (sub === 5 || sub === 7);
+          const baseNote = isJumpHit
+            ? chordRootMidi - 12
+            : chordRootMidi - 24;
+
           songData.push({
             type: "sound",
             soundType: "bass",
-            time: t,
-            note: chordRootMidi - 24,
+            time: subTime,
+            note: baseNote,
             played: false,
           });
-
-          if (isChorus) {
-            songData.push({
-              type: "sound",
-              soundType: "bass",
-              time: t + beatTime / 2,
-              note: chordRootMidi - 24,
-              played: false,
-            });
-          }
         }
       }
     }

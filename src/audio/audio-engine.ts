@@ -255,11 +255,11 @@ export class AudioEngine {
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = "highpass";
-    filter.frequency.setValueAtTime(7000, now);
+    filter.frequency.setValueAtTime(5200, now);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
 
     noise.connect(filter);
     filter.connect(gain);

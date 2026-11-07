@@ -172,7 +172,7 @@ function createMelodyPhrase(
 
         // ノーツ種別: 強拍 (0, 4) およびシンコペーション (2, 6) でロングノーツ判定
         const isLongCandidate = isDownBeat || sub === 2 || sub === 6;
-        const isLong = isLongCandidate && rng() < 0.32;
+        const isLong = isLongCandidate && rng() < 0.38;
         const noteType: "normal" | "long" = isLong ? "long" : "normal";
 
         notes.push({
@@ -184,19 +184,24 @@ function createMelodyPhrase(
     }
   }
 
-  // 1フレーズ（4小節）あたり最低2個のロングノーツを保証
+  // 1フレーズ（4小節）あたり最低3個のロングノーツを確実に保証
   const currentLongCount = notes.filter(
     (n) => n.noteType === "long",
   ).length;
-  if (currentLongCount < 2) {
-    const candidates = notes.filter(
-      (n) =>
-        (n.subBeat % 4 === 0 || n.subBeat % 8 === 6) &&
-        n.noteType === "normal",
-    );
+  if (currentLongCount < 3) {
+    // 強拍またはシンコペーション音符を優先してロング化
+    const candidates = notes.filter((n) => n.noteType === "normal");
+    candidates.sort((a, b) => {
+      const aScore =
+        (a.subBeat % 4 === 0 ? 2 : 0) + (a.subBeat % 8 === 6 ? 1 : 0);
+      const bScore =
+        (b.subBeat % 4 === 0 ? 2 : 0) + (b.subBeat % 8 === 6 ? 1 : 0);
+      return bScore - aScore;
+    });
+
     for (
       let i = 0;
-      i < Math.min(candidates.length, 2 - currentLongCount);
+      i < Math.min(candidates.length, 3 - currentLongCount);
       i++
     ) {
       candidates[i].noteType = "long";

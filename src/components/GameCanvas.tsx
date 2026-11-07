@@ -119,6 +119,7 @@ export const GameCanvas: React.FC = () => {
           engine.laneEffects,
           engine.hitEffects,
           engine.particles,
+          engine.bpm,
         );
       }
 

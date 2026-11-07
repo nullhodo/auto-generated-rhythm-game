@@ -23,6 +23,7 @@ export class CanvasRenderer {
     laneEffects: LaneEffect[],
     hitEffects: HitEffect[],
     particles: Particle[],
+    bpm = 145,
   ): void {
     const { ctx } = this;
     const {
@@ -40,6 +41,9 @@ export class CanvasRenderer {
     // プレイエリア背景 (ノーツの視認性を保つため半透明の遮光ダークネイビー)
     ctx.fillStyle = "rgba(12, 12, 18, 0.88)";
     ctx.fillRect(laneXStart, 0, totalLaneWidth, height);
+
+    // 1小節ごとの小節線 (Bar Lines) 描画
+    this.renderBarLines(layout, currentTime, noteSpeed, bpm);
 
     // レーン区切り線
     ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
@@ -364,6 +368,57 @@ export class CanvasRenderer {
       ctx.fillText(LANE_KEYS[i], x, y);
     }
     ctx.restore();
+  }
+
+  /**
+   * 1小節ごとに流れるうすい小節線 (Bar Line) の描画
+   */
+  private renderBarLines(
+    layout: GameLayout,
+    currentTime: number,
+    noteSpeed: number,
+    bpm: number,
+  ): void {
+    const { ctx } = this;
+    const { laneXStart, totalLaneWidth, judgeLineY } = layout;
+    const barDuration = (4 * 60000) / bpm;
+    const totalBars = 32;
+
+    const minBar = Math.max(
+      0,
+      Math.floor((currentTime - 100) / barDuration),
+    );
+    const maxBar = Math.min(
+      totalBars,
+      Math.ceil((currentTime + noteSpeed) / barDuration),
+    );
+
+    for (let bar = minBar; bar <= maxBar; bar++) {
+      const barStartTime = bar * barDuration;
+      const progress =
+        (currentTime - (barStartTime - noteSpeed)) / noteSpeed;
+      const y = -50 + progress * (judgeLineY - -50);
+
+      if (y < -50 || y > judgeLineY + 40) continue;
+
+      let alpha = 0.22;
+      if (y > judgeLineY) {
+        alpha = Math.max(0, 0.22 * (1 - (y - judgeLineY) / 40));
+      }
+
+      ctx.save();
+      const isPhraseBoundary = bar % 4 === 0;
+      ctx.strokeStyle = isPhraseBoundary
+        ? `rgba(0, 229, 255, ${alpha * 1.5})`
+        : `rgba(255, 255, 255, ${alpha})`;
+      ctx.lineWidth = isPhraseBoundary ? 1.5 : 1;
+
+      ctx.beginPath();
+      ctx.moveTo(laneXStart, y);
+      ctx.lineTo(laneXStart + totalLaneWidth, y);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   private roundRect(

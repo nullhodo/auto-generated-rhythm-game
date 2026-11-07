@@ -132,11 +132,11 @@ function selectLaneForNote(
 function createMelodyPhrase(
   rng: () => number,
   progression: number[],
-  scaleLength: number,
   isBridge = false,
 ): PhraseNote[] {
   const notes: PhraseNote[] = [];
-  let currentTone = isBridge ? 9 : 7; // 中域からスタート
+  // 中域からスタート (落ち着いた心地よいメロディ帯域)
+  let currentTone = isBridge ? 4 : 2;
 
   // 4小節 (小節0..3)
   for (let bar = 0; bar < 4; bar++) {
@@ -156,10 +156,10 @@ function createMelodyPhrase(
 
       if (rng() < playChance) {
         if (isDownBeat) {
-          // 強拍はコードトーンを狙って和音感を安定させる
+          // 強拍はコードトーンを狙って和音感を安定させる (オクターブ高すぎを防止)
           const baseChordTone =
             chordTones[Math.floor(rng() * chordTones.length)];
-          const octave = rng() < 0.6 ? 7 : 14;
+          const octave = rng() < 0.7 ? 0 : 7;
           currentTone = baseChordTone + octave;
         } else {
           // 弱拍・裏拍は順次進行（近くの音へステップ移動）
@@ -167,8 +167,8 @@ function createMelodyPhrase(
           currentTone += step;
         }
 
-        // 音域制限
-        currentTone = Math.max(2, Math.min(scaleLength - 3, currentTone));
+        // 音域制限: サビで1オクターブ上に展開されるため、基本フレーズは中域 (0..9) にクランプ
+        currentTone = Math.max(0, Math.min(9, currentTone));
 
         // ノーツ種別: 強拍 (0, 4) およびシンコペーション (2, 6) でロングノーツ判定
         const isLongCandidate = isDownBeat || sub === 2 || sub === 6;
@@ -256,19 +256,9 @@ export function generateSong(
 
   // ★ 1曲の核となる「フレーズ」を定義 ★
   // Phrase A: メインテーマ（Verseとサビで反復されるキラーリフ）
-  const phraseA = createMelodyPhrase(
-    rng,
-    chosenProg,
-    scaleExt.length,
-    false,
-  );
+  const phraseA = createMelodyPhrase(rng, chosenProg, false);
   // Phrase B: Bメロ用（対比と助走のフレーズ）
-  const phraseB = createMelodyPhrase(
-    rng,
-    chosenProg,
-    scaleExt.length,
-    true,
-  );
+  const phraseB = createMelodyPhrase(rng, chosenProg, true);
 
   const totalBars = 32;
   const songEndTime = totalBars * 4 * beatTime;
@@ -399,7 +389,9 @@ export function generateSong(
               scaleExt.length - 1,
               pNote.scaleToneIndex + octaveOffset,
             );
-            const midi = scaleExt[toneIdx];
+            const rawMidi = scaleExt[toneIdx];
+            // 高すぎる耳障りな音 (MIDI > 84 / 1046Hz) を心地よいリード帯域 (C6以下) に制限
+            const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
 
             songData.push({
               type: "sound",
@@ -473,7 +465,9 @@ export function generateSong(
         0,
         Math.min(scaleExt.length - 1, rawTone),
       );
-      const midi = scaleExt[clampedTone];
+      const rawMidi = scaleExt[clampedTone];
+      // 高すぎる耳障りな音 (MIDI > 84 / 1046Hz) を心地よいリード帯域 (C6以下) に制限
+      const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
 
       songData.push({
         type: "sound",

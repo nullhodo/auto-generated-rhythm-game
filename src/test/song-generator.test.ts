@@ -184,4 +184,27 @@ describe("Song Generator Tests", () => {
       }
     }
   });
+
+  it("should keep all melody and chord pitches within comfortable frequency bounds (<= 1200Hz / MIDI 86)", () => {
+    for (let run = 0; run < 5; run++) {
+      const song = generateSong();
+      const soundEvents = song.events.filter((e) => e.type === "sound");
+
+      for (const ev of soundEvents) {
+        if (ev.type === "sound") {
+          if (typeof ev.note === "number") {
+            // 単音メロディ・ベース音 (耳に刺さる高音 MIDI > 86 / 1175Hz を排除)
+            expect(ev.note).toBeLessThanOrEqual(86);
+            expect(ev.note).toBeGreaterThanOrEqual(24);
+          }
+          if (ev.chordNotes) {
+            // 和音コード音符 (耳に刺さる高音を排除)
+            for (const midi of ev.chordNotes) {
+              expect(midi).toBeLessThanOrEqual(86);
+            }
+          }
+        }
+      }
+    }
+  });
 });

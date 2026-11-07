@@ -380,8 +380,8 @@ export class AudioEngine {
     oscSaw.detune.setValueAtTime(6, now);
 
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(3600, now);
-    filter.Q.setValueAtTime(1.6, now);
+    filter.frequency.setValueAtTime(2200, now);
+    filter.Q.setValueAtTime(1.2, now);
 
     gain.gain.setValueAtTime(0.001, now);
     gain.gain.linearRampToValueAtTime(0.26, now + 0.006);
@@ -521,8 +521,8 @@ export class AudioEngine {
 
       const clickFilter = this.ctx.createBiquadFilter();
       clickFilter.type = "bandpass";
-      clickFilter.frequency.setValueAtTime(5200, now);
-      clickFilter.Q.setValueAtTime(3.0, now);
+      clickFilter.frequency.setValueAtTime(3200, now);
+      clickFilter.Q.setValueAtTime(2.2, now);
 
       const clickGain = this.ctx.createGain();
       clickGain.gain.setValueAtTime(0.3, now);
@@ -586,8 +586,8 @@ export class AudioEngine {
     const ctx = this.ctx;
     const sfxGain = this.sfxGain;
 
-    // アルペジオ和音: C6, E6, G6, C7
-    const freqs = [1046.5, 1318.5, 1568.0, 2093.0];
+    // アルペジオ和音: C5, E5, G5, C6 (温かみのある煌めき)
+    const freqs = [523.25, 659.25, 783.99, 1046.5];
     freqs.forEach((freq, idx) => {
       const delay = idx * 0.025;
       const t = now + delay;

@@ -146,7 +146,7 @@ flowchart TD
     CHK_COOL -- 全レーン塞がり --> PICK_EARLIEST["最も早く終了するレーンを選択"]
     FLT_PREV -- 候補あり --> SORT["ソート評価"]
     FLT_PREV -- なし --> SORT
-    
+
     subgraph EVAL["ソート基準"]
         direction TB
         E1["1. 使用回数が最も少ないレーンを最優先<br/>(偏り平滑化)"]
@@ -243,3 +243,4 @@ flowchart TD
 | **COMPLETE** | ロングノーツ完走 | 300点 | 放射状大爆発エフェクト |
 
 ノーツ落下速度は `NOTE_SPEED = 600ms`（画面上部に出現してから判定ラインに到達するまでの所要時間）に設定されています。
+

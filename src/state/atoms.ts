@@ -7,4 +7,3 @@ export const comboAtom = atom<number>(0);
 export const maxComboAtom = atom<number>(0);
 export const bpmAtom = atom<number>(145);
 export const isMutedAtom = atom<boolean>(false);
-

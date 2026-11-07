@@ -49,4 +49,3 @@ describe("Song Generator Tests", () => {
     expect(Math.round(midiToFreq(81))).toBe(880);
   });
 });
-

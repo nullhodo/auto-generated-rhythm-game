@@ -66,6 +66,7 @@ export class GameEngine {
   public songEndTime = 0;
   public startTime = 0;
 
+  private lastHoldTickTime = 0;
   private audioEngine: AudioEngine;
   private callbacks: GameEngineCallbacks;
 
@@ -133,6 +134,24 @@ export class GameEngine {
       }
     }
 
+    // 長押し（ホールド）中の継続エフェクト & サウンド
+    let hasHoldingNote = false;
+    for (let laneIdx = 0; laneIdx < 4; laneIdx++) {
+      for (const note of this.lanes[laneIdx]) {
+        if (note.isHolding && !note.processed) {
+          hasHoldingNote = true;
+          this.createHoldSpark(laneIdx, layout);
+        }
+      }
+    }
+
+    if (hasHoldingNote && now - this.lastHoldTickTime >= 90) {
+      this.audioEngine.playHoldTick();
+      this.lastHoldTickTime = now;
+      this.score += 5;
+      this.callbacks.onScoreChange(this.score);
+    }
+
     // 見逃しMISS判定
     for (let laneIdx = 0; laneIdx < 4; laneIdx++) {
       const laneNotes = this.lanes[laneIdx];
@@ -148,6 +167,7 @@ export class GameEngine {
         ) {
           this.combo = 0;
           this.callbacks.onComboChange(0);
+          this.audioEngine.playHitSound("MISS");
           this.addHitText(laneIdx, "MISS", [120, 120, 120], layout);
           note.processed = true;
         }
@@ -195,6 +215,9 @@ export class GameEngine {
           this.callbacks.onScoreChange(this.score);
           this.callbacks.onComboChange(this.combo);
 
+          // Web Audio API によるヒットサウンド再生
+          this.audioEngine.playHitSound(evalResult.judge);
+
           this.addHitText(
             lane,
             evalResult.judge,
@@ -209,6 +232,7 @@ export class GameEngine {
           note.isHolding = true;
           this.combo++;
           this.callbacks.onComboChange(this.combo);
+          this.audioEngine.playHitSound("PERFECT");
           this.createExplosion(lane, [0, 255, 136], layout);
           return;
         }
@@ -226,11 +250,14 @@ export class GameEngine {
             }
             this.callbacks.onScoreChange(this.score);
             this.callbacks.onComboChange(this.combo);
+
+            this.audioEngine.playHitSound("COMPLETE");
             this.addHitText(lane, "COMPLETE", [255, 255, 255], layout);
           } else {
             note.processed = true;
             this.combo = 0;
             this.callbacks.onComboChange(0);
+            this.audioEngine.playHitSound("MISS");
             this.addHitText(lane, "MISS", [120, 120, 120], layout);
           }
         }
@@ -271,6 +298,29 @@ export class GameEngine {
         size: Math.random() * 7 + 3,
         color,
         life: 70,
+      });
+    }
+  }
+
+  private createHoldSpark(lane: number, layout: GameLayout): void {
+    const x =
+      layout.laneXStart + lane * layout.laneWidth + layout.laneWidth / 2;
+    // 毎フレーム2〜3個の高速スパーク粒子を上方向に生成
+    for (let i = 0; i < 2; i++) {
+      const colors: [number, number, number][] = [
+        [0, 255, 136],
+        [160, 255, 200],
+        [255, 255, 255],
+      ];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * (layout.laneWidth * 0.7),
+        y: layout.judgeLineY + (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -Math.random() * 7 - 2,
+        size: Math.random() * 4 + 2,
+        color,
+        life: 25,
       });
     }
   }

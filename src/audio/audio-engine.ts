@@ -1,9 +1,10 @@
-import type { SoundEvent } from "../types/game";
+import type { HitJudge, SoundEvent } from "../types/game";
 import { midiToFreq } from "./song-generator";
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private whiteNoiseBuffer: AudioBuffer | null = null;
   private pinkNoiseBuffer: AudioBuffer | null = null;
@@ -41,6 +42,11 @@ export class AudioEngine {
 
     this.masterGain.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
+
+    // 効果音チェイン (音楽のサイドチェインに影響されない独立ゲイン)
+    this.sfxGain = this.ctx.createGain();
+    this.sfxGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+    this.sfxGain.connect(this.ctx.destination);
 
     // ノイズバッファ生成
     this.createNoiseBuffers();
@@ -292,12 +298,174 @@ export class AudioEngine {
 
   public toggleMute(): boolean {
     this.isMuted = !this.isMuted;
-    if (this.ctx && this.masterGain) {
-      this.masterGain.gain.setValueAtTime(
-        this.isMuted ? 0 : 0.6,
-        this.ctx.currentTime,
-      );
+    if (this.ctx) {
+      if (this.masterGain) {
+        this.masterGain.gain.setValueAtTime(
+          this.isMuted ? 0 : 0.6,
+          this.ctx.currentTime,
+        );
+      }
+      if (this.sfxGain) {
+        this.sfxGain.gain.setValueAtTime(
+          this.isMuted ? 0 : 0.7,
+          this.ctx.currentTime,
+        );
+      }
     }
     return this.isMuted;
+  }
+
+  /**
+   * 打鍵時のヒットサウンドをWeb Audio APIで生成・再生
+   */
+  public playHitSound(judge: HitJudge): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    switch (judge) {
+      case "PERFECT":
+        this.playCrispTap(now, 2200, 750, 0.055, 0.45);
+        this.playNoiseClick(now, 4500, 0.015, 0.35);
+        break;
+      case "GREAT":
+        this.playCrispTap(now, 1600, 600, 0.05, 0.38);
+        this.playNoiseClick(now, 3200, 0.015, 0.28);
+        break;
+      case "GOOD":
+        this.playCrispTap(now, 1100, 500, 0.045, 0.3);
+        break;
+      case "COMPLETE":
+        this.playCompleteChime(now);
+        break;
+      case "MISS":
+        this.playMissSound(now);
+        break;
+    }
+  }
+
+  /**
+   * 長押し（ホールド）中に定期的に鳴る細かなパルス音
+   */
+  public playHoldTick(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(2600, now);
+    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.02);
+
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.02);
+  }
+
+  private playCrispTap(
+    now: number,
+    startFreq: number,
+    endFreq: number,
+    duration: number,
+    volume: number,
+  ): void {
+    if (!this.ctx || !this.sfxGain) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
+
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  private playNoiseClick(
+    now: number,
+    filterFreq: number,
+    duration: number,
+    volume: number,
+  ): void {
+    if (!this.ctx || !this.sfxGain || !this.whiteNoiseBuffer) return;
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this.whiteNoiseBuffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(filterFreq, now);
+    filter.Q.setValueAtTime(3.0, now);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
+  private playCompleteChime(now: number): void {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const sfxGain = this.sfxGain;
+
+    // アルペジオ和音: C6, E6, G6, C7
+    const freqs = [1046.5, 1318.5, 1568.0, 2093.0];
+    freqs.forEach((freq, idx) => {
+      const delay = idx * 0.025;
+      const t = now + delay;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+      osc.connect(gain);
+      gain.connect(sfxGain);
+
+      osc.start(t);
+      osc.stop(t + 0.28);
+    });
+  }
+
+  private playMissSound(now: number): void {
+    if (!this.ctx || !this.sfxGain) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(140, now);
+    osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.1);
   }
 }

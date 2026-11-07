@@ -150,4 +150,3 @@ export const HUD: React.FC<HUDProps> = ({ onToggleMute }) => {
     </div>
   );
 };
-

@@ -66,4 +66,3 @@ export interface GameLayout {
   laneXStart: number;
   judgeLineY: number;
 }
-

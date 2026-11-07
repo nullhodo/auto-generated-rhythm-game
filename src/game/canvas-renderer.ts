@@ -137,26 +137,167 @@ export class CanvasRenderer {
           const endProgress =
             (currentTime - (note.endTime - noteSpeed)) / noteSpeed;
           const endY = -50 + endProgress * (judgeLineY - -50);
-          let tailY = Math.min(y, judgeLineY);
-          if (!note.isHolding) {
-            tailY = y;
-          }
-
-          // ロングの帯
-          ctx.save();
-          ctx.fillStyle = "rgba(0, 255, 136, 0.35)";
-          ctx.fillRect(x + 10, endY, laneWidth - 20, tailY - endY);
-
-          // ヘッドバー
-          ctx.fillStyle = "#00ff88";
-          ctx.shadowColor = "rgba(0, 255, 136, 0.6)";
-          ctx.shadowBlur = 8;
-          this.roundRect(x + 4, tailY - 12, laneWidth - 8, 24, 6);
-          ctx.fill();
-          ctx.restore();
+          this.renderLongNote(
+            note,
+            x,
+            y,
+            endY,
+            laneWidth,
+            judgeLineY,
+            currentTime,
+          );
         }
       }
     }
+  }
+
+  private renderLongNote(
+    note: ActiveNote,
+    x: number,
+    y: number,
+    endY: number,
+    laneWidth: number,
+    judgeLineY: number,
+    currentTime: number,
+  ): void {
+    const { ctx } = this;
+    let tailY = Math.min(y, judgeLineY);
+    if (!note.isHolding) {
+      tailY = y;
+    }
+
+    const bodyTop = endY;
+    const bodyBottom = tailY;
+    const bodyHeight = bodyBottom - bodyTop;
+
+    if (bodyHeight > 0) {
+      ctx.save();
+
+      // 1. ホールド中のレーンエネルギービーム (判定ラインから上部へのネオングロー)
+      if (note.isHolding) {
+        const beamTop = Math.max(0, endY - 60);
+        const beamGrad = ctx.createLinearGradient(
+          0,
+          judgeLineY,
+          0,
+          beamTop,
+        );
+        beamGrad.addColorStop(0, "rgba(0, 255, 136, 0.35)");
+        beamGrad.addColorStop(0.6, "rgba(0, 255, 136, 0.15)");
+        beamGrad.addColorStop(1, "rgba(0, 255, 136, 0)");
+        ctx.fillStyle = beamGrad;
+        ctx.fillRect(x, beamTop, laneWidth, judgeLineY - beamTop);
+      }
+
+      // 2. 帯本体のグラデーション塗り
+      const bodyGrad = ctx.createLinearGradient(0, bodyTop, 0, bodyBottom);
+      if (note.isHolding) {
+        bodyGrad.addColorStop(0, "rgba(0, 255, 136, 0.3)");
+        bodyGrad.addColorStop(0.7, "rgba(0, 255, 136, 0.55)");
+        bodyGrad.addColorStop(1, "rgba(120, 255, 190, 0.75)");
+      } else {
+        bodyGrad.addColorStop(0, "rgba(0, 255, 136, 0.2)");
+        bodyGrad.addColorStop(1, "rgba(0, 255, 136, 0.45)");
+      }
+
+      const bodyX = x + 12;
+      const bodyW = laneWidth - 24;
+      ctx.fillStyle = bodyGrad;
+      ctx.fillRect(bodyX, bodyTop, bodyW, bodyHeight);
+
+      // 3. 左右のネオンレールライン
+      ctx.strokeStyle = note.isHolding
+        ? "rgba(180, 255, 210, 0.95)"
+        : "rgba(0, 255, 136, 0.75)";
+      ctx.lineWidth = note.isHolding ? 3 : 2;
+      ctx.shadowColor = "#00ff88";
+      ctx.shadowBlur = note.isHolding ? 10 : 6;
+      ctx.beginPath();
+      ctx.moveTo(bodyX, bodyTop);
+      ctx.lineTo(bodyX, bodyBottom);
+      ctx.moveTo(bodyX + bodyW, bodyTop);
+      ctx.lineTo(bodyX + bodyW, bodyBottom);
+      ctx.stroke();
+
+      // 4. 帯内部のエネルギーパルス模様 (下方向へ流れるストライプ)
+      const stripeSpacing = 28;
+      const stripeOffset = (currentTime * 0.15) % stripeSpacing;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (
+        let sy = bodyBottom - stripeOffset;
+        sy >= bodyTop;
+        sy -= stripeSpacing
+      ) {
+        ctx.moveTo(bodyX + 4, sy);
+        ctx.lineTo(bodyX + bodyW - 4, sy);
+      }
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // 5. 終端 (Tail Cap) バーの描画
+    ctx.save();
+    ctx.fillStyle = "#00ff88";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "#00ff88";
+    ctx.shadowBlur = 8;
+    this.roundRect(x + 6, endY - 8, laneWidth - 12, 16, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // 終端センターアクセント
+    ctx.fillStyle = "#ffffff";
+    this.roundRect(x + laneWidth / 2 - 10, endY - 2, 20, 4, 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 6. ヘッドバーの描画
+    ctx.save();
+    if (note.isHolding) {
+      // ホールド中の打鍵点パルス拡大
+      const pulse = Math.sin(currentTime * 0.03) * 3;
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#00ff88";
+      ctx.shadowBlur = 18;
+      this.roundRect(
+        x + 2 - pulse / 2,
+        tailY - 14 - pulse / 2,
+        laneWidth - 4 + pulse,
+        28 + pulse,
+        8,
+      );
+      ctx.fill();
+
+      // インサイドコア
+      ctx.fillStyle = "#00ff88";
+      this.roundRect(x + 8, tailY - 8, laneWidth - 16, 16, 4);
+      ctx.fill();
+
+      // HOLDING テキスト
+      ctx.font = 'bold 13px "Zen Maru Gothic", sans-serif';
+      ctx.fillStyle = "#00ff88";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.shadowColor = "#00ff88";
+      ctx.shadowBlur = 8;
+      ctx.fillText("HOLDING", x + laneWidth / 2, tailY - 18);
+    } else {
+      ctx.fillStyle = "#00ff88";
+      ctx.shadowColor = "rgba(0, 255, 136, 0.7)";
+      ctx.shadowBlur = 8;
+      this.roundRect(x + 4, tailY - 12, laneWidth - 8, 24, 6);
+      ctx.fill();
+
+      // センターハイライト
+      ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+      this.roundRect(x + 10, tailY - 4, laneWidth - 20, 8, 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private renderEffects(

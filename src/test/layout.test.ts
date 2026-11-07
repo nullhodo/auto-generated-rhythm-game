@@ -48,6 +48,24 @@ describe("Layout & Boundary Tests", () => {
     });
   }
 
+  it("should enforce minimum width (160) and height (200) bounds", () => {
+    const layoutTiny = computeGameLayout(50, 50);
+    expect(layoutTiny.width).toBe(160);
+    expect(layoutTiny.height).toBe(200);
+    expect(isLayoutWithinBounds(layoutTiny)).toBe(true);
+  });
+
+  it("should switch horizontal padding based on screen width", () => {
+    // 480未満は余白16px、480以上は余白32px
+    const narrowLayout = computeGameLayout(400, 800);
+    const wideLayout = computeGameLayout(500, 800);
+
+    // narrow: available = 400 - 32 = 368, laneWidth = 368 / 4 = 92
+    expect(narrowLayout.laneWidth).toBe(92);
+    // wide: available = 500 - 64 = 436, candidate = 436 / 4 = 109 -> MAX_LANE_WIDTH (100)
+    expect(wideLayout.laneWidth).toBe(MAX_LANE_WIDTH);
+  });
+
   it("should reject invalid lanes for note positions", () => {
     const layout = computeGameLayout(1920, 1080);
     expect(isNotePositionValid(-1, layout)).toBe(false);

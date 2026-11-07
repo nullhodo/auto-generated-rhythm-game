@@ -20,9 +20,16 @@ export class AudioEngine {
     }
 
     const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
+      typeof window !== "undefined"
+        ? window.AudioContext ||
+          (
+            window as unknown as {
+              webkitAudioContext: typeof AudioContext;
+            }
+          ).webkitAudioContext
+        : (globalThis as unknown as { AudioContext: typeof AudioContext })
+            .AudioContext;
+    if (!AudioContextClass) return;
     this.ctx = new AudioContextClass();
 
     if (this.ctx.state === "suspended") {

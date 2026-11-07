@@ -61,9 +61,12 @@ auto-generated-rhythm-game
     │   ├── TrackNotification.tsx - 楽曲開始時のKey/コード進行通知 (右下)
     │   └── ResultScreen.tsx  - リザルト画面
     └── test/
-        ├── layout.test.ts    - 画面解像度別のはみ出しチェックテスト
-        ├── song-generator.test.ts - 楽曲生成データと周波数計算のテスト
-        └── game-engine.test.ts - タイミング判定・キーマッピングテスト
+        ├── layout.test.ts    - 画面解像度別のはみ出し・境界判定テスト
+        ├── song-generator.test.ts - 楽曲構造・スケール適合・EDMドラム生成テスト
+        ├── game-engine.test.ts - タイミング判定・コンボ追跡・ライフサイクルテスト
+        ├── audio-engine.test.ts - Web Audio API音響合成・効果音・サイドチェインテスト
+        ├── canvas-renderer.test.ts - Canvas描画処理・エフェクト減衰テスト
+        └── atoms.test.ts     - Jotaiアトム初期値・状態遷移テスト
 ```
 
 ## 4. 実行方法

@@ -89,6 +89,19 @@ const MELODY_STYLE_INFOS: MelodyStyleInfo[] = [
   { type: "staccato", label: "Club Staccato Hook" },
 ];
 
+type BuildupStyleType =
+  | "breakdown" // ドラムを抜いた静寂の美学・コードパッドとロングトーン
+  | "syncopated-tease" // テンポ倍速にせず裏拍グルーヴをキープした助走
+  | "half-time" // どっしり重厚なハーフテンポ
+  | "riser-rush"; // 王道EDM（最後の1小節のみに凝縮したスッキリ展開）
+
+const BUILDUP_STYLES: BuildupStyleType[] = [
+  "breakdown",
+  "syncopated-tease",
+  "half-time",
+  "riser-rush",
+];
+
 /**
  * 4小節（32サブビート = 8分音符32個分）からなる1つのフレーズ単位
  */
@@ -372,6 +385,10 @@ export function generateSong(
   const styleIndex = Math.floor(rng() * MELODY_STYLE_INFOS.length);
   const chosenStyleInfo = MELODY_STYLE_INFOS[styleIndex];
 
+  // ★ サビ前のビルドアップ（助走）スタイルをランダム選定 ★
+  const buildupStyleIndex = Math.floor(rng() * BUILDUP_STYLES.length);
+  const chosenBuildupStyle = BUILDUP_STYLES[buildupStyleIndex];
+
   const meta: SongMeta = {
     keyName: keyDetail.keyName,
     scaleName: "Natural Minor",
@@ -413,43 +430,84 @@ export function generateSong(
     for (let beat = 0; beat < 4; beat++) {
       const t = currentTime + beat * beatTime;
 
-      // ドラムイベント
-      songData.push({
-        type: "sound",
-        soundType: "kick",
-        time: t,
-        played: false,
-      });
-
-      if (isBuildUp) {
-        // ビルドアップ時はスネアが加速ロール
+      if (isBuildUp && chosenBuildupStyle === "breakdown") {
+        // 1. ブレイクダウン: キック・スネア・ベースを完全カット（静寂と空間）
+        // サビ直前の最後の1拍 (bar 19, beat 3) にだけスネア1打フィルイン
+        if (bar === 19 && beat === 3) {
+          songData.push({
+            type: "sound",
+            soundType: "snare",
+            time: t,
+            played: false,
+          });
+        }
+      } else if (isBuildUp && chosenBuildupStyle === "half-time") {
+        // 2. ハーフタイム: テンポ感を半分に落とした重厚なビート
+        if (beat === 0) {
+          songData.push({
+            type: "sound",
+            soundType: "kick",
+            time: t,
+            played: false,
+          });
+        }
+        if (beat === 2) {
+          songData.push({
+            type: "sound",
+            soundType: "snare",
+            time: t,
+            played: false,
+          });
+        }
+        if (beat % 2 === 0) {
+          songData.push({
+            type: "sound",
+            soundType: "hat",
+            time: t,
+            played: false,
+          });
+        }
+      } else {
+        // 3. 通常の4つ打ち、または syncopated-tease / riser-rush
         songData.push({
           type: "sound",
-          soundType: "snare",
+          soundType: "kick",
           time: t,
           played: false,
         });
+
+        if (isBuildUp && chosenBuildupStyle === "riser-rush" && bar === 19) {
+          // riser-rush でも最後の小節 (bar 19) のみ加速
+          songData.push({
+            type: "sound",
+            soundType: "snare",
+            time: t,
+            played: false,
+          });
+          if (beat < 3) {
+            songData.push({
+              type: "sound",
+              soundType: "snare",
+              time: t + beatTime / 2,
+              played: false,
+            });
+          }
+        } else if (beat === 1 || beat === 3) {
+          songData.push({
+            type: "sound",
+            soundType: "snare",
+            time: t,
+            played: false,
+          });
+        }
+
         songData.push({
           type: "sound",
-          soundType: "snare",
+          soundType: "hat",
           time: t + beatTime / 2,
           played: false,
         });
-      } else if (beat === 1 || beat === 3) {
-        songData.push({
-          type: "sound",
-          soundType: "snare",
-          time: t,
-          played: false,
-        });
       }
-
-      songData.push({
-        type: "sound",
-        soundType: "hat",
-        time: t + beatTime / 2,
-        played: false,
-      });
 
       // コード（和音バッキング）: 小節頭およびサビの2拍目
       if (beat === 0 || (isChorus && beat === 2)) {
@@ -463,23 +521,37 @@ export function generateSong(
         });
       }
 
-      // ベース
-      songData.push({
-        type: "sound",
-        soundType: "bass",
-        time: t,
-        note: chordRootMidi - 24,
-        played: false,
-      });
+      // ベース (breakdown時は鳴らさない)
+      if (!(isBuildUp && chosenBuildupStyle === "breakdown")) {
+        if (isBuildUp && chosenBuildupStyle === "half-time") {
+          if (beat === 0 || beat === 2) {
+            songData.push({
+              type: "sound",
+              soundType: "bass",
+              time: t,
+              note: chordRootMidi - 24,
+              played: false,
+            });
+          }
+        } else {
+          songData.push({
+            type: "sound",
+            soundType: "bass",
+            time: t,
+            note: chordRootMidi - 24,
+            played: false,
+          });
 
-      if (isChorus || isBuildUp) {
-        songData.push({
-          type: "sound",
-          soundType: "bass",
-          time: t + beatTime / 2,
-          note: chordRootMidi - 24,
-          played: false,
-        });
+          if (isChorus) {
+            songData.push({
+              type: "sound",
+              soundType: "bass",
+              time: t + beatTime / 2,
+              note: chordRootMidi - 24,
+              played: false,
+            });
+          }
+        }
       }
     }
 
@@ -506,66 +578,96 @@ export function generateSong(
     startBar: number,
     octaveOffset = 0,
     variationPitchOffset = 0,
-    stutterCount = 0,
     isChorusSection = false,
+    isRiserRush = false,
   ) => {
     const phraseStartTime = startBar * 4 * beatTime;
 
-    if (stutterCount > 0) {
-      // ビルドアップ用: 小節境界 (4小節分) を跨がず、かつ同一時刻の音の重複を完全に排除したEDMスタッター
+    if (isRiserRush) {
+      // riser-rush 用: 最初の3小節は通常テンポ、最後の1小節のみ8分音符でスッキリ助走
       const leadNotes = phrase.slice(0, 4);
       for (let b = 0; b < 4; b++) {
         const barStart = phraseStartTime + b * 4 * beatTime;
-        // 小節ごとに徐々に連打密度を加速 (Bar 0: 4分音符4打, Bar 1: 8分音符8打, Bar 2: 8分音符8打, Bar 3: 16分音符12打 + 1拍ブレイク)
-        let stepCount = 4;
-        let stepDuration = beatTime;
-        if (b === 1 || b === 2) {
-          stepCount = 8;
-          stepDuration = subBeatTime;
-        } else if (b === 3) {
-          // サビ直前の最後の小節: 12打の高速連打のあと、最後の1拍はサビ前の静寂ブレイク（溜め）
-          stepCount = 12;
-          stepDuration = beatTime / 4;
-        }
+        if (b < 3) {
+          // 前半3小節は4分音符のゆったりした演奏（長すぎる倍速連打を防止）
+          for (let step = 0; step < 4; step++) {
+            const noteTime = barStart + step * beatTime;
+            const pNote = leadNotes[step % leadNotes.length];
+            const toneIdx = Math.min(
+              scaleExt.length - 1,
+              pNote.scaleToneIndex + octaveOffset,
+            );
+            const rawMidi = scaleExt[toneIdx];
+            const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
 
-        for (let step = 0; step < stepCount; step++) {
-          const noteTime = barStart + step * stepDuration;
-          const pNote = leadNotes[step % leadNotes.length];
-          const toneIdx = Math.min(
-            scaleExt.length - 1,
-            pNote.scaleToneIndex + octaveOffset,
-          );
-          const rawMidi = scaleExt[toneIdx];
-          const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
+            songData.push({
+              type: "sound",
+              soundType: "melody",
+              time: noteTime,
+              note: midi,
+              played: false,
+            });
 
-          songData.push({
-            type: "sound",
-            soundType: "melody",
-            time: noteTime,
-            note: midi,
-            played: false,
-          });
+            const lane = selectLaneForNote(
+              noteTime,
+              toneIdx,
+              scaleExt.length,
+              lastNoteEndTimes,
+              lastAssignedLane,
+              laneUsageCount,
+            );
+            lastAssignedLane = lane;
 
-          // ノーツ追加: 4レーン均等分散アルゴリズム
-          const lane = selectLaneForNote(
-            noteTime,
-            toneIdx,
-            scaleExt.length,
-            lastNoteEndTimes,
-            lastAssignedLane,
-            laneUsageCount,
-          );
-          lastAssignedLane = lane;
+            songData.push({
+              type: "note",
+              time: noteTime,
+              endTime: noteTime,
+              lane,
+              noteType: "normal",
+              spawned: false,
+            });
+            lastNoteEndTimes[lane] = noteTime;
+          }
+        } else {
+          // 最後の小節 (bar 19): 8分音符6打 + 1拍ブレイク (サビ前のキレの良い溜め)
+          for (let step = 0; step < 6; step++) {
+            const noteTime = barStart + step * subBeatTime;
+            const pNote = leadNotes[step % leadNotes.length];
+            const toneIdx = Math.min(
+              scaleExt.length - 1,
+              pNote.scaleToneIndex + octaveOffset,
+            );
+            const rawMidi = scaleExt[toneIdx];
+            const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
 
-          songData.push({
-            type: "note",
-            time: noteTime,
-            endTime: noteTime,
-            lane,
-            noteType: "normal",
-            spawned: false,
-          });
-          lastNoteEndTimes[lane] = noteTime;
+            songData.push({
+              type: "sound",
+              soundType: "melody",
+              time: noteTime,
+              note: midi,
+              played: false,
+            });
+
+            const lane = selectLaneForNote(
+              noteTime,
+              toneIdx,
+              scaleExt.length,
+              lastNoteEndTimes,
+              lastAssignedLane,
+              laneUsageCount,
+            );
+            lastAssignedLane = lane;
+
+            songData.push({
+              type: "note",
+              time: noteTime,
+              endTime: noteTime,
+              lane,
+              noteType: "normal",
+              spawned: false,
+            });
+            lastNoteEndTimes[lane] = noteTime;
+          }
         }
       }
       return;
@@ -689,14 +791,43 @@ export function generateSong(
   // 3. Bridge (Bars 12..15): Phrase B (落ち着いた別メロディ)
   applyPhraseToBars(phraseB, 12, 0, 0);
 
-  // 4. Build-up (Bars 16..19): Phrase A の冒頭モチーフのスタッター連打
-  applyPhraseToBars(phraseA, 16, 0, 0, 4);
+  // 4. Build-up (Bars 16..19): 多彩なサビ前助走スタイル
+  switch (chosenBuildupStyle) {
+    case "breakdown":
+      // ドラムを抜いた静寂の美学: 落ち着いたロングトーンと空間の広がり（倍速感ゼロ）
+      applyPhraseToBars(
+        phraseB.filter((_, idx) => idx % 2 === 0),
+        16,
+        0,
+        0,
+        false,
+      );
+      break;
+    case "half-time":
+      // どっしりハーフテンポ: 2拍に1音の重厚なタメ
+      applyPhraseToBars(
+        phraseA.filter((p) => p.subBeat % 4 === 0),
+        16,
+        0,
+        -1,
+        false,
+      );
+      break;
+    case "syncopated-tease":
+      // テンポを崩さない裏拍グルーヴ: メインフレーズの変奏を通常テンポで演奏
+      applyPhraseToBars(phraseA, 16, 0, 1, false);
+      break;
+    case "riser-rush":
+      // 王道EDM: 最後の1小節のみに凝縮したスッキリとした駆け上がり
+      applyPhraseToBars(phraseA, 16, 0, 0, false, true);
+      break;
+  }
 
   // 5. Chorus 1 (Bars 20..23): ★ Phrase A が 1オクターブ上 (+7スケール = +12半音) で大復活！
-  applyPhraseToBars(phraseA, 20, 7, 0, 0, true);
+  applyPhraseToBars(phraseA, 20, 7, 0, true);
 
   // 6. Chorus 2 (Bars 24..27): ★ Phrase A' のオクターブ上クライマックス
-  applyPhraseToBars(phraseA, 24, 7, 2, 0, true);
+  applyPhraseToBars(phraseA, 24, 7, 2, true);
 
   // 7. Outro (Bars 28..31): Phrase A のフェードアウト
   applyPhraseToBars(

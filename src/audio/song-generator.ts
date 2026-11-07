@@ -63,7 +63,67 @@ interface PhraseNote {
   subBeat: number; // 0..31
   scaleToneIndex: number; // 3オクターブスケール内のインデックス (0..20)
   noteType: "normal" | "long";
-  lane: number; // 0..3
+}
+
+/**
+ * ノーツを4つのレーンに均等かつ音楽的に自然に配分する
+ */
+function selectLaneForNote(
+  noteTime: number,
+  scaleTone: number,
+  scaleLength: number,
+  lastNoteEndTimes: number[],
+  lastLane: number,
+  laneUsageCount: number[],
+): number {
+  // 音高に応じた目安レーン (低音: 0, 1 / 高音: 2, 3)
+  const toneRatio = Math.max(
+    0,
+    Math.min(1, scaleTone / (scaleLength - 1)),
+  );
+  const preferredLane = Math.min(3, Math.floor(toneRatio * 4));
+
+  // 直前のノーツから90ms以上空いているレーンを候補とする
+  const availableLanes: number[] = [];
+  for (let l = 0; l < 4; l++) {
+    if (noteTime >= lastNoteEndTimes[l] + 90) {
+      availableLanes.push(l);
+    }
+  }
+
+  // もし空きがなければ、最も早く終了するレーンを選ぶ
+  if (availableLanes.length === 0) {
+    let earliest = 0;
+    for (let l = 1; l < 4; l++) {
+      if (lastNoteEndTimes[l] < lastNoteEndTimes[earliest]) {
+        earliest = l;
+      }
+    }
+    laneUsageCount[earliest]++;
+    return earliest;
+  }
+
+  // 縦連（同じレーンの連打）を防止するため、直前と異なるレーンを優先
+  const differentLanes = availableLanes.filter((l) => l !== lastLane);
+  const candidates =
+    differentLanes.length > 0 ? differentLanes : availableLanes;
+
+  // 使用頻度の少ないレーン、および音高に近いレーンを優先してソート
+  candidates.sort((a, b) => {
+    // 1. 各レーンの使用回数を平滑化（偏りを徹底排除）
+    const usageDiff = laneUsageCount[a] - laneUsageCount[b];
+    if (usageDiff !== 0) {
+      return usageDiff;
+    }
+    // 2. 同数なら音高（低音＝左、高音＝右）に近い方を優先
+    const distA = Math.abs(a - preferredLane);
+    const distB = Math.abs(b - preferredLane);
+    return distA - distB;
+  });
+
+  const selected = candidates[0];
+  laneUsageCount[selected]++;
+  return selected;
 }
 
 /**
@@ -77,7 +137,6 @@ function createMelodyPhrase(
 ): PhraseNote[] {
   const notes: PhraseNote[] = [];
   let currentTone = isBridge ? 9 : 7; // 中域からスタート
-  let currentLane = Math.floor(rng() * 4);
 
   // 4小節 (小節0..3)
   for (let bar = 0; bar < 4; bar++) {
@@ -115,15 +174,10 @@ function createMelodyPhrase(
         const isLong = (sub === 0 || sub === 4) && rng() < 0.22;
         const noteType: "normal" | "long" = isLong ? "long" : "normal";
 
-        // レーン選択 (音高の上下に合わせて自然に移動)
-        const laneStep = rng() < 0.5 ? (rng() < 0.5 ? -1 : 1) : 0;
-        currentLane = Math.max(0, Math.min(3, currentLane + laneStep));
-
         notes.push({
           subBeat: bar * 8 + sub,
           scaleToneIndex: currentTone,
           noteType,
-          lane: currentLane,
         });
       }
     }
@@ -292,6 +346,10 @@ export function generateSong(
   // - 24..27: Chorus 2 / Drop (Phrase A' のオクターブ上クライマックス)
   // - 28..31: Outro (Phrase A のフェードアウト余韻)
 
+  // 各レーンのノーツ使用回数を追跡して偏りを完全に平滑化
+  const laneUsageCount = [0, 0, 0, 0];
+  let lastAssignedLane = -1;
+
   const applyPhraseToBars = (
     phrase: PhraseNote[],
     startBar: number,
@@ -325,19 +383,26 @@ export function generateSong(
               played: false,
             });
 
-            // ノーツ追加
-            const lane = pNote.lane;
-            if (noteTime > lastNoteEndTimes[lane] + 90) {
-              songData.push({
-                type: "note",
-                time: noteTime,
-                endTime: noteTime,
-                lane,
-                noteType: "normal",
-                spawned: false,
-              });
-              lastNoteEndTimes[lane] = noteTime;
-            }
+            // ノーツ追加: 4レーン均等分散アルゴリズム
+            const lane = selectLaneForNote(
+              noteTime,
+              toneIdx,
+              scaleExt.length,
+              lastNoteEndTimes,
+              lastAssignedLane,
+              laneUsageCount,
+            );
+            lastAssignedLane = lane;
+
+            songData.push({
+              type: "note",
+              time: noteTime,
+              endTime: noteTime,
+              lane,
+              noteType: "normal",
+              spawned: false,
+            });
+            lastNoteEndTimes[lane] = noteTime;
           }
         }
       }
@@ -366,19 +431,26 @@ export function generateSong(
         played: false,
       });
 
-      // ノーツの配置
-      const lane = pNote.lane;
-      if (noteTime > lastNoteEndTimes[lane] + 100) {
-        songData.push({
-          type: "note",
-          time: noteTime,
-          endTime,
-          lane,
-          noteType: pNote.noteType,
-          spawned: false,
-        });
-        lastNoteEndTimes[lane] = endTime;
-      }
+      // ノーツの配置: 4レーン均等分散アルゴリズム
+      const lane = selectLaneForNote(
+        noteTime,
+        clampedTone,
+        scaleExt.length,
+        lastNoteEndTimes,
+        lastAssignedLane,
+        laneUsageCount,
+      );
+      lastAssignedLane = lane;
+
+      songData.push({
+        type: "note",
+        time: noteTime,
+        endTime,
+        lane,
+        noteType: pNote.noteType,
+        spawned: false,
+      });
+      lastNoteEndTimes[lane] = endTime;
     }
   };
 

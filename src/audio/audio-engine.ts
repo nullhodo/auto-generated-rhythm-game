@@ -419,7 +419,7 @@ export class AudioEngine {
   }
 
   /**
-   * 打鍵時のヒットサウンドをWeb Audio APIで生成・再生
+   * 打鍵時のヒットサウンド (短い押し: スネア1音ショット)
    */
   public playHitSound(judge: HitJudge): void {
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
@@ -427,17 +427,17 @@ export class AudioEngine {
 
     switch (judge) {
       case "PERFECT":
-        this.playCrispTap(now, 2200, 750, 0.055, 0.45);
-        this.playNoiseClick(now, 4500, 0.015, 0.35);
+        this.playSnareShot(now, 240, 95, 0.15, 0.65, 0.5);
         break;
       case "GREAT":
-        this.playCrispTap(now, 1600, 600, 0.05, 0.38);
-        this.playNoiseClick(now, 3200, 0.015, 0.28);
+        this.playSnareShot(now, 210, 90, 0.12, 0.5, 0.38);
         break;
       case "GOOD":
-        this.playCrispTap(now, 1100, 500, 0.045, 0.3);
+        this.playSnareShot(now, 180, 85, 0.1, 0.38, 0.28);
         break;
       case "COMPLETE":
+        // ロール完了のアクセントスネア + チャイム
+        this.playSnareShot(now, 260, 100, 0.2, 0.75, 0.55);
         this.playCompleteChime(now);
         break;
       case "MISS":
@@ -447,81 +447,131 @@ export class AudioEngine {
   }
 
   /**
-   * 長押し（ホールド）中に定期的に鳴る細かなパルス音
+   * 長押し（ホールド）中のスネア連打（スネアロール）効果音
    */
   public playHoldTick(): void {
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
     const now = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(2600, now);
-    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.02);
-
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.02);
+    this.playSnareRollTap(now);
   }
 
-  private playCrispTap(
+  /**
+   * スネア1音ショット (胴鳴りトーン + スナッピーノイズ + アタッククリック)
+   */
+  private playSnareShot(
     now: number,
-    startFreq: number,
-    endFreq: number,
-    duration: number,
-    volume: number,
+    startTone: number,
+    endTone: number,
+    noiseDuration: number,
+    toneVolume: number,
+    noiseVolume: number,
   ): void {
     if (!this.ctx || !this.sfxGain) return;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    // 1. スネア胴鳴りトーン (Sine波ピッチベンド)
+    const toneOsc = this.ctx.createOscillator();
+    const toneGain = this.ctx.createGain();
+    toneOsc.type = "sine";
+    toneOsc.frequency.setValueAtTime(startTone, now);
+    toneOsc.frequency.exponentialRampToValueAtTime(endTone, now + 0.08);
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(startFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
+    toneGain.gain.setValueAtTime(toneVolume, now);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    toneOsc.connect(toneGain);
+    toneGain.connect(this.sfxGain);
+    toneOsc.start(now);
+    toneOsc.stop(now + 0.08);
 
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
+    // 2. スネアスナッピー (ピンクノイズ + HighPass)
+    if (this.pinkNoiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.pinkNoiseBuffer;
 
-    osc.start(now);
-    osc.stop(now + duration);
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(1100, now);
+
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(noiseVolume, now);
+      noiseGain.gain.exponentialRampToValueAtTime(
+        0.001,
+        now + noiseDuration,
+      );
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.sfxGain);
+
+      noise.start(now);
+      noise.stop(now + noiseDuration);
+    }
+
+    // 3. アタッククリック (ホワイトノイズ + BandPass 5200Hz)
+    if (this.whiteNoiseBuffer) {
+      const click = this.ctx.createBufferSource();
+      click.buffer = this.whiteNoiseBuffer;
+
+      const clickFilter = this.ctx.createBiquadFilter();
+      clickFilter.type = "bandpass";
+      clickFilter.frequency.setValueAtTime(5200, now);
+      clickFilter.Q.setValueAtTime(3.0, now);
+
+      const clickGain = this.ctx.createGain();
+      clickGain.gain.setValueAtTime(0.3, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.016);
+
+      click.connect(clickFilter);
+      clickFilter.connect(clickGain);
+      clickGain.connect(this.sfxGain);
+
+      click.start(now);
+      click.stop(now + 0.016);
+    }
   }
 
-  private playNoiseClick(
-    now: number,
-    filterFreq: number,
-    duration: number,
-    volume: number,
-  ): void {
-    if (!this.ctx || !this.sfxGain || !this.whiteNoiseBuffer) return;
+  /**
+   * スネアロール（連打）用タイトタップ
+   */
+  private playSnareRollTap(now: number): void {
+    if (!this.ctx || !this.sfxGain) return;
 
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = this.whiteNoiseBuffer;
+    // スティックの打撃感 (微小なピッチ揺らぎでリアルなロール感を演出)
+    const pitchJitter = 230 + Math.random() * 40;
+    const tone = this.ctx.createOscillator();
+    const toneGain = this.ctx.createGain();
 
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = "bandpass";
-    filter.frequency.setValueAtTime(filterFreq, now);
-    filter.Q.setValueAtTime(3.0, now);
+    tone.type = "triangle";
+    tone.frequency.setValueAtTime(pitchJitter, now);
+    tone.frequency.exponentialRampToValueAtTime(110, now + 0.03);
 
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    toneGain.gain.setValueAtTime(0.24, now);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
 
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.sfxGain);
+    tone.connect(toneGain);
+    toneGain.connect(this.sfxGain);
+    tone.start(now);
+    tone.stop(now + 0.03);
 
-    noise.start(now);
-    noise.stop(now + duration);
+    if (this.pinkNoiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.pinkNoiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(1400, now);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.28, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+
+      noise.start(now);
+      noise.stop(now + 0.04);
+    }
   }
 
   private playCompleteChime(now: number): void {

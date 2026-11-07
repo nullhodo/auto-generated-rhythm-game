@@ -148,7 +148,7 @@ export class GameEngine {
       }
     }
 
-    // 長押し（ホールド）中の継続エフェクト & サウンド
+    // 長押し（ホールド）中のスネア連打（スネアロール）& スパーク演出
     let hasHoldingNote = false;
     for (let laneIdx = 0; laneIdx < 4; laneIdx++) {
       for (const note of this.lanes[laneIdx]) {
@@ -159,7 +159,7 @@ export class GameEngine {
       }
     }
 
-    if (hasHoldingNote && now - this.lastHoldTickTime >= 90) {
+    if (hasHoldingNote && now - this.lastHoldTickTime >= 65) {
       this.audioEngine.playHoldTick();
       this.lastHoldTickTime = now;
       this.score += 5;

@@ -34,11 +34,11 @@ export class AudioEngine {
     this.masterGain.gain.setValueAtTime(0.6, this.ctx.currentTime);
 
     this.compressor = this.ctx.createDynamicsCompressor();
-    this.compressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
-    this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
-    this.compressor.ratio.setValueAtTime(10, this.ctx.currentTime);
+    this.compressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
+    this.compressor.knee.setValueAtTime(25, this.ctx.currentTime);
+    this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
     this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
-    this.compressor.release.setValueAtTime(0.1, this.ctx.currentTime);
+    this.compressor.release.setValueAtTime(0.12, this.ctx.currentTime);
 
     this.masterGain.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
@@ -144,33 +144,53 @@ export class AudioEngine {
           this.playMelody(event.note, now);
         }
         break;
+      case "chord":
+        if (event.chordNotes) {
+          this.playChord(event.chordNotes, now);
+        }
+        break;
     }
   }
 
   private playKick(now: number): void {
     if (!this.ctx || !this.masterGain) return;
 
-    // サブベースオシレーター（ピッチベンド）
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(32, now + 0.12);
+    // 重低音サブベースオシレーター (180Hz -> 38Hz 急速指数降下)
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = "sine";
+    subOsc.frequency.setValueAtTime(180, now);
+    subOsc.frequency.exponentialRampToValueAtTime(38, now + 0.14);
 
-    gain.gain.setValueAtTime(1.0, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    subGain.gain.setValueAtTime(1.0, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.2);
+    subOsc.connect(subGain);
+    subGain.connect(this.masterGain);
+    subOsc.start(now);
+    subOsc.stop(now + 0.28);
+
+    // パンチ胴鳴り (Triangle波 120Hz -> 45Hz)
+    const punchOsc = this.ctx.createOscillator();
+    const punchGain = this.ctx.createGain();
+    punchOsc.type = "triangle";
+    punchOsc.frequency.setValueAtTime(120, now);
+    punchOsc.frequency.exponentialRampToValueAtTime(45, now + 0.08);
+
+    punchGain.gain.setValueAtTime(0.7, now);
+    punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    punchOsc.connect(punchGain);
+    punchGain.connect(this.masterGain);
+    punchOsc.start(now);
+    punchOsc.stop(now + 0.08);
 
     // アタックのクリック音
     if (this.whiteNoiseBuffer) {
       const click = this.ctx.createBufferSource();
       const clickGain = this.ctx.createGain();
       click.buffer = this.whiteNoiseBuffer;
-      clickGain.gain.setValueAtTime(0.6, now);
+      clickGain.gain.setValueAtTime(0.7, now);
       clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
       click.connect(clickGain);
       clickGain.connect(this.masterGain);
@@ -179,29 +199,45 @@ export class AudioEngine {
     }
 
     // サイドチェイン圧縮効果
-    this.sidechainAmount = 0.2;
+    this.sidechainAmount = 0.15;
   }
 
   private playSnare(now: number): void {
     if (!this.ctx || !this.masterGain || !this.pinkNoiseBuffer) return;
 
+    // トーン胴鳴り (220Hz -> 80Hz)
+    const toneOsc = this.ctx.createOscillator();
+    const toneGain = this.ctx.createGain();
+    toneOsc.type = "sine";
+    toneOsc.frequency.setValueAtTime(220, now);
+    toneOsc.frequency.exponentialRampToValueAtTime(80, now + 0.09);
+
+    toneGain.gain.setValueAtTime(0.6, now);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+    toneOsc.connect(toneGain);
+    toneGain.connect(this.masterGain);
+    toneOsc.start(now);
+    toneOsc.stop(now + 0.09);
+
+    // ノイズ成分
     const noise = this.ctx.createBufferSource();
     noise.buffer = this.pinkNoiseBuffer;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = "highpass";
-    filter.frequency.setValueAtTime(1000, now);
+    filter.frequency.setValueAtTime(850, now);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.8, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    gain.gain.setValueAtTime(0.85, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
     noise.start(now);
-    noise.stop(now + 0.18);
+    noise.stop(now + 0.22);
   }
 
   private playHat(now: number): void {
@@ -226,67 +262,134 @@ export class AudioEngine {
     noise.stop(now + 0.05);
   }
 
+  /**
+   * 重厚なReese / Cyberpunk Sawベース (デチューン2基 + サブサイン波)
+   */
   private playBass(midiNote: number, now: number): void {
     if (!this.ctx || !this.masterGain) return;
     const freq = midiToFreq(midiNote);
 
-    // Sawtooth
-    const saw = this.ctx.createOscillator();
+    // デチューンSawtooth 2基 (うねりのあるローエンド)
+    const saw1 = this.ctx.createOscillator();
+    const saw2 = this.ctx.createOscillator();
+    saw1.type = "sawtooth";
+    saw2.type = "sawtooth";
+    saw1.frequency.setValueAtTime(freq, now);
+    saw2.frequency.setValueAtTime(freq, now);
+    saw1.detune.setValueAtTime(-8, now);
+    saw2.detune.setValueAtTime(8, now);
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(950, now);
+    filter.Q.setValueAtTime(2.8, now);
+
     const sawGain = this.ctx.createGain();
-    saw.type = "sawtooth";
-    saw.frequency.setValueAtTime(freq, now);
-
     sawGain.gain.setValueAtTime(0.001, now);
-    sawGain.gain.linearRampToValueAtTime(0.4, now + 0.01);
-    sawGain.gain.exponentialRampToValueAtTime(0.15, now + 0.2);
-    sawGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    sawGain.gain.linearRampToValueAtTime(0.45, now + 0.012);
+    sawGain.gain.exponentialRampToValueAtTime(0.2, now + 0.2);
+    sawGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
 
-    saw.connect(sawGain);
+    saw1.connect(filter);
+    saw2.connect(filter);
+    filter.connect(sawGain);
     sawGain.connect(this.masterGain);
-    saw.start(now);
-    saw.stop(now + 0.35);
 
-    // Sub sine (1オクターブ下)
+    saw1.start(now);
+    saw2.start(now);
+    saw1.stop(now + 0.38);
+    saw2.stop(now + 0.38);
+
+    // Sub sine (1オクターブ下で床を鳴らす重低音)
     const sub = this.ctx.createOscillator();
     const subGain = this.ctx.createGain();
     sub.type = "sine";
     sub.frequency.setValueAtTime(midiToFreq(midiNote - 12), now);
 
     subGain.gain.setValueAtTime(0.001, now);
-    subGain.gain.linearRampToValueAtTime(0.5, now + 0.02);
-    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    subGain.gain.linearRampToValueAtTime(0.55, now + 0.02);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
 
     sub.connect(subGain);
     subGain.connect(this.masterGain);
     sub.start(now);
-    sub.stop(now + 0.4);
+    sub.stop(now + 0.42);
   }
 
+  /**
+   * 重厚なコード・パッドバッキング (和音3音の豊かなハーモニー)
+   */
+  private playChord(chordNotes: number[], now: number): void {
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const masterGain = this.masterGain;
+
+    for (const midi of chordNotes) {
+      const freq = midiToFreq(midi);
+
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now);
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1500, now);
+      filter.frequency.exponentialRampToValueAtTime(800, now + 0.45);
+      filter.Q.setValueAtTime(1.5, now);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.16, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(masterGain);
+
+      osc.start(now);
+      osc.stop(now + 0.5);
+    }
+  }
+
+  /**
+   * 華やかで抜けの良いリードメロディ (Square + Sawtooth デチューン合成)
+   */
   private playMelody(midiNote: number, now: number): void {
     if (!this.ctx || !this.masterGain) return;
     const freq = midiToFreq(midiNote);
 
-    const osc = this.ctx.createOscillator();
+    const oscSquare = this.ctx.createOscillator();
+    const oscSaw = this.ctx.createOscillator();
     const filter = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
 
-    osc.type = "square";
-    osc.frequency.setValueAtTime(freq, now);
+    oscSquare.type = "square";
+    oscSquare.frequency.setValueAtTime(freq, now);
+
+    oscSaw.type = "sawtooth";
+    oscSaw.frequency.setValueAtTime(freq, now);
+    oscSaw.detune.setValueAtTime(6, now);
 
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(3200, now);
+    filter.frequency.setValueAtTime(3600, now);
+    filter.Q.setValueAtTime(1.6, now);
 
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.28, now + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.15);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    gain.gain.linearRampToValueAtTime(0.26, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.14, now + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
 
-    osc.connect(filter);
+    oscSquare.connect(filter);
+    oscSaw.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
-    osc.start(now);
-    osc.stop(now + 0.35);
+    oscSquare.start(now);
+    oscSaw.start(now);
+    oscSquare.stop(now + 0.36);
+    oscSaw.stop(now + 0.36);
   }
 
   public fadeOutAndStop(durationSec = 0.5): void {

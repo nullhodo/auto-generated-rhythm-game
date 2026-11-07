@@ -2,7 +2,13 @@ export type GameState = "START" | "PLAYING" | "RESULT";
 
 export type NoteType = "normal" | "long";
 
-export type SoundType = "kick" | "snare" | "hat" | "bass" | "melody";
+export type SoundType =
+  | "kick"
+  | "snare"
+  | "hat"
+  | "bass"
+  | "melody"
+  | "chord";
 
 export type HitJudge = "PERFECT" | "GREAT" | "GOOD" | "MISS" | "COMPLETE";
 
@@ -11,6 +17,7 @@ export interface SoundEvent {
   soundType: SoundType;
   time: number;
   note?: number;
+  chordNotes?: number[];
   played: boolean;
 }
 

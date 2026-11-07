@@ -105,6 +105,18 @@ export function generateSong(
         played: false,
       });
 
+      // コード（和音バッキング）
+      if (beat === 0 || (isChorus && beat === 2)) {
+        const chordMidis = chordTones.map((idx) => scaleExt[idx]);
+        songData.push({
+          type: "sound",
+          soundType: "chord",
+          time: t,
+          chordNotes: chordMidis,
+          played: false,
+        });
+      }
+
       // ベース
       songData.push({
         type: "sound",

@@ -85,6 +85,20 @@ export const TrackNotification: React.FC = () => {
               {songMeta.keyName} ({songMeta.scaleName})
             </div>
 
+            {songMeta.melodyStyle && (
+              <div
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  color: "#ff007f",
+                  textShadow: "0 0 10px rgba(255, 0, 127, 0.6)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                STYLE: {songMeta.melodyStyle}
+              </div>
+            )}
+
             <div
               style={{
                 fontSize: "1rem",

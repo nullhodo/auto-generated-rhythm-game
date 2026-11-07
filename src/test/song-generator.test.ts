@@ -242,4 +242,17 @@ describe("Song Generator Tests", () => {
       expect(foundSimultaneous).toBe(true);
     }
   });
+
+  it("should generate diverse melody styles across multiple runs", () => {
+    const generatedStyles = new Set<string>();
+    for (let run = 0; run < 25; run++) {
+      const song = generateSong();
+      if (song.meta.melodyStyle) {
+        generatedStyles.add(song.meta.melodyStyle);
+      }
+    }
+
+    // 25回の生成で、複数の多彩なスタイルが選出されることを検証
+    expect(generatedStyles.size).toBeGreaterThanOrEqual(3);
+  });
 });

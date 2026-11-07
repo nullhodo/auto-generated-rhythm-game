@@ -54,6 +54,39 @@ const PROGRESSION_INFOS = [
   { pattern: [3, 4, 0, 0], label: "iv - v - i - i (EDM定番進行)" },
   { pattern: [0, 5, 2, 6], label: "i - VI - III - VII (王道進行)" },
   { pattern: [5, 6, 2, 0], label: "VI - VII - III - i (カノン派生進行)" },
+  { pattern: [0, 2, 3, 4], label: "i - III - iv - v (ステップ上昇進行)" },
+  {
+    pattern: [0, 6, 5, 6],
+    label: "i - VII - VI - VII (哀愁アンダルシア進行)",
+  },
+  {
+    pattern: [5, 0, 2, 6],
+    label: "VI - i - III - VII (エモーショナル進行)",
+  },
+  {
+    pattern: [3, 0, 4, 4],
+    label: "iv - i - v - v (フューチャーベース進行)",
+  },
+];
+
+type MelodyStyleType =
+  | "anthem"
+  | "arpeggio"
+  | "syncopated"
+  | "cascade"
+  | "staccato";
+
+interface MelodyStyleInfo {
+  type: MelodyStyleType;
+  label: string;
+}
+
+const MELODY_STYLE_INFOS: MelodyStyleInfo[] = [
+  { type: "anthem", label: "Festival Anthem" },
+  { type: "arpeggio", label: "Cyber Arpeggio" },
+  { type: "syncopated", label: "Syncopated Bounce" },
+  { type: "cascade", label: "Melodic Cascade" },
+  { type: "staccato", label: "Club Staccato Hook" },
 ];
 
 /**
@@ -127,81 +160,155 @@ function selectLaneForNote(
 }
 
 /**
- * 4小節のメロディフレーズ（モチーフ）をプロシージャル生成
+ * 4小節のメロディフレーズ（モチーフ）をアーキタイプ別にプロシージャル生成
  */
 function createMelodyPhrase(
   rng: () => number,
   progression: number[],
+  style: MelodyStyleType,
   isBridge = false,
 ): PhraseNote[] {
   const notes: PhraseNote[] = [];
-  // 中域からスタート (落ち着いた心地よいメロディ帯域)
-  let currentTone = isBridge ? 4 : 2;
 
-  // 4小節 (小節0..3)
+  // スタイルごとのバリエーション乱数シード
+  const arpPatterns = [
+    [0, 1, 2, 1, 2, 0, 1],
+    [0, 2, 1, 3, 2, 0, 1],
+    [0, 1, 2, 3, 2, 1, 0],
+  ];
+  const chosenArpPattern =
+    arpPatterns[Math.floor(rng() * arpPatterns.length)];
+  const cascadeTopTone = rng() < 0.5 ? 8 : 7;
+  const staccatoJump = rng() < 0.5 ? 4 : 5;
+
+  // スタイルごとのリズムパターンと旋律輪郭の定義 (8サブビート x 4小節)
   for (let bar = 0; bar < 4; bar++) {
     const degree = progression[bar % 4];
     const chordTones = CHORDS[degree];
 
-    // 小節内のリズムパターン
-    // 8つのサブビート (8分音符単位: 0..7)
-    // キャッチーなEDMリズム（強拍とシンコペーション）
-    for (let sub = 0; sub < 8; sub++) {
-      const isDownBeat = sub === 0 || sub === 4;
-      const isSyncopation = sub === 2 || sub === 6 || sub === 7;
-
-      // 音を鳴らす確率
-      let playChance = isDownBeat ? 0.9 : isSyncopation ? 0.65 : 0.25;
-      if (isBridge) playChance *= 0.75; // ブリッジは少し間引いて静けさを演出
-
-      if (rng() < playChance) {
-        if (isDownBeat) {
-          // 強拍はコードトーンを狙って和音感を安定させる (オクターブ高すぎを防止)
-          const baseChordTone =
-            chordTones[Math.floor(rng() * chordTones.length)];
-          const octave = rng() < 0.7 ? 0 : 7;
-          currentTone = baseChordTone + octave;
-        } else {
-          // 弱拍・裏拍は順次進行（近くの音へステップ移動）
-          const step = Math.floor(rng() * 5) - 2; // -2, -1, 0, 1, 2
-          currentTone += step;
+    switch (style) {
+      case "arpeggio": {
+        // 1. 疾走アルペジオ: 8分音符でコードトーンを階段状に駆け上がる流麗シーケンス
+        for (let sub = 0; sub < 7; sub++) {
+          const toneIdx =
+            chordTones[chosenArpPattern[sub] % chordTones.length] +
+            (sub >= 4 ? 4 : 0);
+          const isLong = bar === 3 && sub === 4;
+          notes.push({
+            subBeat: bar * 8 + sub,
+            scaleToneIndex: Math.max(0, Math.min(9, toneIdx)),
+            noteType: isLong ? "long" : "normal",
+          });
         }
+        break;
+      }
 
-        // 音域制限: サビで1オクターブ上に展開されるため、基本フレーズは中域 (0..9) にクランプ
-        currentTone = Math.max(0, Math.min(9, currentTone));
+      case "anthem": {
+        // 2. 王道アンセム: 1拍目に力強いロングトーンを提示し、後半で応答するコール＆レスポンス
+        const anthemSubs =
+          bar % 2 === 0
+            ? [
+                { sub: 0, long: true, tone: chordTones[0] + 3 },
+                { sub: 3, long: false, tone: chordTones[1] + 1 },
+                { sub: 4, long: false, tone: chordTones[2] },
+                { sub: 6, long: true, tone: chordTones[0] + 2 },
+              ]
+            : [
+                { sub: 0, long: false, tone: chordTones[0] },
+                { sub: 2, long: false, tone: chordTones[1] },
+                { sub: 4, long: false, tone: chordTones[2] + 1 },
+                { sub: 6, long: true, tone: chordTones[0] + 4 },
+              ];
 
-        // ノーツ種別: 強拍 (0, 4) およびシンコペーション (2, 6) でロングノーツ判定
-        const isLongCandidate = isDownBeat || sub === 2 || sub === 6;
-        const isLong = isLongCandidate && rng() < 0.38;
-        const noteType: "normal" | "long" = isLong ? "long" : "normal";
+        for (const item of anthemSubs) {
+          notes.push({
+            subBeat: bar * 8 + item.sub,
+            scaleToneIndex: Math.max(0, Math.min(9, item.tone)),
+            noteType: item.long ? "long" : "normal",
+          });
+        }
+        break;
+      }
 
-        notes.push({
-          subBeat: bar * 8 + sub,
-          scaleToneIndex: currentTone,
-          noteType,
-        });
+      case "syncopated": {
+        // 3. シンコペーション・バウンス: 表拍を抜いて裏拍で飛び跳ねるダンサブルなグルーヴ
+        const synSubs = [1, 2, 4, 5, 7];
+        for (let idx = 0; idx < synSubs.length; idx++) {
+          const sub = synSubs[idx];
+          const tone =
+            chordTones[idx % chordTones.length] + (idx % 2 === 0 ? 0 : 2);
+          const isLong =
+            idx === synSubs.length - 1 && (bar === 1 || bar === 3);
+          notes.push({
+            subBeat: bar * 8 + sub,
+            scaleToneIndex: Math.max(0, Math.min(9, tone)),
+            noteType: isLong ? "long" : "normal",
+          });
+        }
+        break;
+      }
+
+      case "cascade": {
+        // 4. カスケード下降: 高音の頂点から階段状に美しく駆け下りてくるドラマチックな旋律
+        const cascadeSubs = [0, 2, 3, 4, 6];
+        for (let idx = 0; idx < cascadeSubs.length; idx++) {
+          const sub = cascadeSubs[idx];
+          const tone = Math.max(
+            0,
+            cascadeTopTone - idx + (bar % 2 === 0 ? 0 : -1),
+          );
+          const isLong = idx === cascadeSubs.length - 1;
+          notes.push({
+            subBeat: bar * 8 + sub,
+            scaleToneIndex: Math.max(0, Math.min(9, tone)),
+            noteType: isLong ? "long" : "normal",
+          });
+        }
+        break;
+      }
+
+      case "staccato": {
+        // 5. クラブスタッカート: 同音をト・ト・トと連打し、小節末尾で跳躍するキャッチーなクラブフック
+        const baseTone = chordTones[bar % chordTones.length];
+        const staccatoSubs = [0, 1, 2, 4, 5, 6];
+        for (let idx = 0; idx < staccatoSubs.length; idx++) {
+          const sub = staccatoSubs[idx];
+          // 最後の音でオクターブまたは5度上にジャンプ！
+          const tone = idx >= 4 ? baseTone + staccatoJump : baseTone;
+          const isLong = idx === staccatoSubs.length - 1;
+          notes.push({
+            subBeat: bar * 8 + sub,
+            scaleToneIndex: Math.max(0, Math.min(9, tone)),
+            noteType: isLong ? "long" : "normal",
+          });
+        }
+        break;
       }
     }
   }
 
-  // 1フレーズ（4小節）あたり最低3個のロングノーツを確実に保証
-  const currentLongCount = notes.filter(
+  // ブリッジ時は少し音数を間引いて対比を演出
+  const filteredNotes = isBridge
+    ? notes.filter(
+        (_, idx) => idx % 2 === 0 || notes[idx].noteType === "long",
+      )
+    : notes;
+
+  // 1フレーズあたり最低4個のロングノーツを確実に保証
+  const currentLongCount = filteredNotes.filter(
     (n) => n.noteType === "long",
   ).length;
-  if (currentLongCount < 3) {
-    // 強拍またはシンコペーション音符を優先してロング化
-    const candidates = notes.filter((n) => n.noteType === "normal");
-    candidates.sort((a, b) => {
-      const aScore =
-        (a.subBeat % 4 === 0 ? 2 : 0) + (a.subBeat % 8 === 6 ? 1 : 0);
-      const bScore =
-        (b.subBeat % 4 === 0 ? 2 : 0) + (b.subBeat % 8 === 6 ? 1 : 0);
-      return bScore - aScore;
-    });
-
+  if (currentLongCount < 4) {
+    const candidates = filteredNotes.filter(
+      (n) => n.noteType === "normal",
+    );
+    candidates.sort(
+      (a, b) =>
+        (b.subBeat % 4 === 0 ? 1 : 0) - (a.subBeat % 4 === 0 ? 1 : 0),
+    );
     for (
       let i = 0;
-      i < Math.min(candidates.length, 3 - currentLongCount);
+      i < Math.min(candidates.length, 4 - currentLongCount);
       i++
     ) {
       candidates[i].noteType = "long";
@@ -210,16 +317,16 @@ function createMelodyPhrase(
 
   // ロングノーツの直後 (1サブビート後) に音がある場合は間引いて、悠々とホールドできるようにする
   const cleanNotes: PhraseNote[] = [];
-  for (let i = 0; i < notes.length; i++) {
+  for (let i = 0; i < filteredNotes.length; i++) {
     const prev = cleanNotes[cleanNotes.length - 1];
     if (
       prev &&
       prev.noteType === "long" &&
-      notes[i].subBeat === prev.subBeat + 1
+      filteredNotes[i].subBeat === prev.subBeat + 1
     ) {
-      continue; // ロングノーツ直後の衝突を間引く
+      continue;
     }
-    cleanNotes.push(notes[i]);
+    cleanNotes.push(filteredNotes[i]);
   }
 
   return cleanNotes;
@@ -261,18 +368,33 @@ export function generateSong(
   );
   const chordProgressionStr = chordNames.join(" → ");
 
+  // ★ 楽曲の性格を決定づけるメロディスタイル（アーキタイプ）を選定 ★
+  const styleIndex = Math.floor(rng() * MELODY_STYLE_INFOS.length);
+  const chosenStyleInfo = MELODY_STYLE_INFOS[styleIndex];
+
   const meta: SongMeta = {
     keyName: keyDetail.keyName,
     scaleName: "Natural Minor",
     progressionPattern: chosenProgInfo.label,
     chordProgression: chordProgressionStr,
+    melodyStyle: chosenStyleInfo.label,
   };
 
   // ★ 1曲の核となる「フレーズ」を定義 ★
-  // Phrase A: メインテーマ（Verseとサビで反復されるキラーリフ）
-  const phraseA = createMelodyPhrase(rng, chosenProg, false);
+  // Phrase A: メインテーマ（選ばれたアーキタイプスタイルで個性を発揮）
+  const phraseA = createMelodyPhrase(
+    rng,
+    chosenProg,
+    chosenStyleInfo.type,
+    false,
+  );
   // Phrase B: Bメロ用（対比と助走のフレーズ）
-  const phraseB = createMelodyPhrase(rng, chosenProg, true);
+  const phraseB = createMelodyPhrase(
+    rng,
+    chosenProg,
+    chosenStyleInfo.type,
+    true,
+  );
 
   const totalBars = 32;
   const songEndTime = totalBars * 4 * beatTime;
@@ -523,10 +645,11 @@ export function generateSong(
       });
       lastNoteEndTimes[lane] = endTime;
 
-      // ★ サビの小節頭 (1拍目) で美しい協和音ダブルノーツ (同時押し) を生成 ★
+      // ★ サビの小節頭 (1拍目または裏拍アタック) で美しい協和音ダブルノーツ (同時押し) を生成 ★
       // 2音が重なる時は、不協和音にならないよう「完全オクターブ (±12半音)」の協和ハーモニーとする
       const isDoubleNoteCandidate =
-        isChorusSection && pNote.subBeat % 8 === 0;
+        isChorusSection &&
+        (pNote.subBeat % 8 === 0 || pNote.subBeat % 8 === 1);
       if (isDoubleNoteCandidate) {
         // 主音に対してオクターブ上（またはオクターブ下）の完全協和音
         const harmonyMidi = midi <= 72 ? midi + 12 : midi - 12;

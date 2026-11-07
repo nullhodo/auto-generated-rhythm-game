@@ -79,4 +79,5 @@ export interface SongMeta {
   scaleName: string;
   progressionPattern: string;
   chordProgression: string;
+  melodyStyle?: string;
 }

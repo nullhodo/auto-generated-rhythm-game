@@ -170,8 +170,9 @@ function createMelodyPhrase(
         // 音域制限
         currentTone = Math.max(2, Math.min(scaleLength - 3, currentTone));
 
-        // ノーツ種別 (ロングノーツは小節の終盤や強拍にアクセントとして出現)
-        const isLong = (sub === 0 || sub === 4) && rng() < 0.22;
+        // ノーツ種別: 強拍 (0, 4) およびシンコペーション (2, 6) でロングノーツ判定
+        const isLongCandidate = isDownBeat || sub === 2 || sub === 6;
+        const isLong = isLongCandidate && rng() < 0.32;
         const noteType: "normal" | "long" = isLong ? "long" : "normal";
 
         notes.push({
@@ -180,6 +181,25 @@ function createMelodyPhrase(
           noteType,
         });
       }
+    }
+  }
+
+  // 1フレーズ（4小節）あたり最低2個のロングノーツを保証
+  const currentLongCount = notes.filter(
+    (n) => n.noteType === "long",
+  ).length;
+  if (currentLongCount < 2) {
+    const candidates = notes.filter(
+      (n) =>
+        (n.subBeat % 4 === 0 || n.subBeat % 8 === 6) &&
+        n.noteType === "normal",
+    );
+    for (
+      let i = 0;
+      i < Math.min(candidates.length, 2 - currentLongCount);
+      i++
+    ) {
+      candidates[i].noteType = "long";
     }
   }
 
@@ -356,6 +376,7 @@ export function generateSong(
     octaveOffset = 0,
     variationPitchOffset = 0,
     stutterCount = 0,
+    isChorusSection = false,
   ) => {
     const phraseStartTime = startBar * 4 * beatTime;
 
@@ -410,9 +431,35 @@ export function generateSong(
     }
 
     // 通常のフレーズ展開
-    for (const pNote of phrase) {
+    for (let i = 0; i < phrase.length; i++) {
+      const pNote = phrase[i];
       const noteTime = phraseStartTime + pNote.subBeat * subBeatTime;
-      const duration = pNote.noteType === "long" ? beatTime : 0;
+
+      // 次の音符との間隔を計算 (重なり防止と持続時間最適化)
+      const nextNote = phrase[i + 1];
+      const nextNoteTime = nextNote
+        ? phraseStartTime + nextNote.subBeat * subBeatTime
+        : phraseStartTime + 32 * subBeatTime;
+      const timeToNext = Math.max(subBeatTime, nextNoteTime - noteTime);
+
+      // サビでの高揚感を高めるため、小節頭の音も積極的にロングノーツへ昇格
+      let noteType: "normal" | "long" = pNote.noteType;
+      if (
+        isChorusSection &&
+        pNote.subBeat % 8 === 0 &&
+        timeToNext >= beatTime * 1.2
+      ) {
+        noteType = "long";
+      }
+
+      // ロングノーツの持続時間 (スネアドラムロールの連打感をしっかり体感できる約1.5拍)
+      let duration = 0;
+      if (noteType === "long") {
+        duration = Math.min(
+          beatTime * 1.5,
+          Math.max(beatTime * 0.9, timeToNext - 80),
+        );
+      }
       const endTime = noteTime + duration;
 
       const rawTone =
@@ -447,7 +494,7 @@ export function generateSong(
         time: noteTime,
         endTime,
         lane,
-        noteType: pNote.noteType,
+        noteType,
         spawned: false,
       });
       lastNoteEndTimes[lane] = endTime;
@@ -467,10 +514,10 @@ export function generateSong(
   applyPhraseToBars(phraseA, 16, 0, 0, 4);
 
   // 5. Chorus 1 (Bars 20..23): ★ Phrase A が 1オクターブ上 (+7スケール = +12半音) で大復活！
-  applyPhraseToBars(phraseA, 20, 7, 0);
+  applyPhraseToBars(phraseA, 20, 7, 0, 0, true);
 
   // 6. Chorus 2 (Bars 24..27): ★ Phrase A' のオクターブ上クライマックス
-  applyPhraseToBars(phraseA, 24, 7, 2);
+  applyPhraseToBars(phraseA, 24, 7, 2, 0, true);
 
   // 7. Outro (Bars 28..31): Phrase A のフェードアウト
   applyPhraseToBars(

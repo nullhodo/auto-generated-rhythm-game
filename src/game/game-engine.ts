@@ -28,6 +28,12 @@ export const KEY_TO_LANE: Record<string, number> = {
 
 export const NOTE_SPEED = 600; // ms
 
+function dispatchVJEvent(detail: { type: "kick" | "hit"; lane?: number }) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("vj-pulse", { detail }));
+  }
+}
+
 interface GameEngineCallbacks {
   onScoreChange: (score: number) => void;
   onComboChange: (combo: number) => void;
@@ -115,6 +121,9 @@ export class GameEngine {
     for (const ev of this.songData) {
       if (ev.type === "sound" && !ev.played && ev.time <= currentTime) {
         this.audioEngine.playEvent(ev);
+        if (ev.soundType === "kick") {
+          dispatchVJEvent({ type: "kick" });
+        }
         ev.played = true;
       }
     }
@@ -222,6 +231,7 @@ export class GameEngine {
 
           // Web Audio API によるヒットサウンド再生
           this.audioEngine.playHitSound(evalResult.judge);
+          dispatchVJEvent({ type: "hit", lane });
 
           this.addHitText(
             lane,
@@ -238,6 +248,7 @@ export class GameEngine {
           this.combo++;
           this.callbacks.onComboChange(this.combo);
           this.audioEngine.playHitSound("PERFECT");
+          dispatchVJEvent({ type: "hit", lane });
           this.createExplosion(lane, [0, 255, 136], layout);
           return;
         }
@@ -257,6 +268,7 @@ export class GameEngine {
             this.callbacks.onComboChange(this.combo);
 
             this.audioEngine.playHitSound("COMPLETE");
+            dispatchVJEvent({ type: "hit", lane });
             this.addHitText(lane, "COMPLETE", [255, 255, 255], layout);
           } else {
             note.processed = true;

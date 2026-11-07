@@ -34,12 +34,11 @@ export class CanvasRenderer {
       judgeLineY,
     } = layout;
 
-    // 全体背景クリア
-    ctx.fillStyle = "#0a0a0f";
-    ctx.fillRect(0, 0, width, height);
+    // 全体背景クリア (背面のp5 VJビジュアライザーを透過表示)
+    ctx.clearRect(0, 0, width, height);
 
-    // プレイエリア背景
-    ctx.fillStyle = "#141419";
+    // プレイエリア背景 (ノーツの視認性を保つため半透明の遮光ダークネイビー)
+    ctx.fillStyle = "rgba(12, 12, 18, 0.88)";
     ctx.fillRect(laneXStart, 0, totalLaneWidth, height);
 
     // レーン区切り線

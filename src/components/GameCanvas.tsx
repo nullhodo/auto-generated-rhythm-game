@@ -236,6 +236,8 @@ export const GameCanvas: React.FC = () => {
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       style={{
+        position: "relative",
+        zIndex: 1,
         display: "block",
         width: "100vw",
         height: "100vh",

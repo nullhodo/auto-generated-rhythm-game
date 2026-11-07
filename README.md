@@ -13,6 +13,7 @@ Web Audio APIによるリアルタイムシンセシスとCanvas 2Dによる高�
 
 - 言語: TypeScript
 - UIフレームワーク: React 19
+- ビジュアル生成: p5.js (WMP / VJ風オーディオビジュアライザー)
 - 状態管理: Jotai
 - UIアニメーション: Framer Motion
 - アイコン: Lucide React
@@ -53,8 +54,10 @@ auto-generated-rhythm-game
     │   └── atoms.ts          - Jotaiステート定義 (スコア、コンボ、BPM等)
     ├── components/
     │   ├── GameCanvas.tsx    - Canvas要素のマウントと入力イベント制御
+    │   ├── VJBackground.tsx  - p5.jsによるWMP風VJ背景ビジュアライザー
     │   ├── StartScreen.tsx   - タイトル画面オーバーレイ
     │   ├── HUD.tsx           - スコア・コンボ・BPM・音量コントロールHUD
+    │   ├── TrackNotification.tsx - 楽曲開始時のKey/コード進行通知 (右下)
     │   └── ResultScreen.tsx  - リザルト画面
     └── test/
         ├── layout.test.ts    - 画面解像度別のはみ出しチェックテスト

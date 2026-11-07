@@ -5,6 +5,7 @@ import { HUD } from "./components/HUD";
 import { ResultScreen } from "./components/ResultScreen";
 import { StartScreen } from "./components/StartScreen";
 import { TrackNotification } from "./components/TrackNotification";
+import { VJBackground } from "./components/VJBackground";
 import { gameStateAtom } from "./state/atoms";
 
 export const App: React.FC = () => {
@@ -23,6 +24,7 @@ export const App: React.FC = () => {
         overflow: "hidden",
       }}
     >
+      <VJBackground />
       <GameCanvas />
 
       {gameState === "START" && (

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@5/overview/configuration-schema.json",
+  "entry": ["src/test/**/*.test.ts"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreDependencies": ["open-props"]
+}

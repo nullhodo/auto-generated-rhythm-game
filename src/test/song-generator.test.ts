@@ -207,4 +207,39 @@ describe("Song Generator Tests", () => {
       }
     }
   });
+
+  it("should ensure simultaneous notes (double notes) are purely consonant intervals (octaves)", () => {
+    for (let run = 0; run < 5; run++) {
+      const song = generateSong();
+
+      // 各時刻ごとのメロディサウンドイベントをグループ化
+      const timeToMelodies = new Map<number, number[]>();
+      for (const ev of song.events) {
+        if (
+          ev.type === "sound" &&
+          ev.soundType === "melody" &&
+          typeof ev.note === "number"
+        ) {
+          const arr = timeToMelodies.get(ev.time) || [];
+          arr.push(ev.note);
+          timeToMelodies.set(ev.time, arr);
+        }
+      }
+
+      // 同一時刻に2つ以上のメロディ音が鳴る場合 (同時押し)
+      let foundSimultaneous = false;
+      for (const [_, midis] of timeToMelodies) {
+        if (midis.length >= 2) {
+          foundSimultaneous = true;
+          // 2音の音程差を検証 (オクターブ 12半音差などの完全協和音)
+          const diff = Math.abs(midis[0] - midis[1]);
+          // 不協和音 (短2度: 1, 長2度: 2, トライトーン: 6, 短7度: 10, 長7度: 11) でないことを検証
+          expect([1, 2, 6, 11]).not.toContain(diff % 12);
+          // 完全オクターブ（12半音差）または協和音程であること
+          expect(diff % 12).toBe(0);
+        }
+      }
+      expect(foundSimultaneous).toBe(true);
+    }
+  });
 });

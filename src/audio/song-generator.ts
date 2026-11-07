@@ -208,7 +208,21 @@ function createMelodyPhrase(
     }
   }
 
-  return notes;
+  // ロングノーツの直後 (1サブビート後) に音がある場合は間引いて、悠々とホールドできるようにする
+  const cleanNotes: PhraseNote[] = [];
+  for (let i = 0; i < notes.length; i++) {
+    const prev = cleanNotes[cleanNotes.length - 1];
+    if (
+      prev &&
+      prev.noteType === "long" &&
+      notes[i].subBeat === prev.subBeat + 1
+    ) {
+      continue; // ロングノーツ直後の衝突を間引く
+    }
+    cleanNotes.push(notes[i]);
+  }
+
+  return cleanNotes;
 }
 
 /**
@@ -376,52 +390,60 @@ export function generateSong(
     const phraseStartTime = startBar * 4 * beatTime;
 
     if (stutterCount > 0) {
-      // ビルドアップ用: フレーズの最初の2音〜4音を小節ごとに細かく連打
-      const leadNotes = phrase.slice(0, 3);
+      // ビルドアップ用: 小節境界 (4小節分) を跨がず、かつ同一時刻の音の重複を完全に排除したEDMスタッター
+      const leadNotes = phrase.slice(0, 4);
       for (let b = 0; b < 4; b++) {
         const barStart = phraseStartTime + b * 4 * beatTime;
-        for (let rep = 0; rep < b + 1; rep++) {
-          for (let ni = 0; ni < leadNotes.length; ni++) {
-            const pNote = leadNotes[ni];
-            const noteTime =
-              barStart + rep * (beatTime * 1.5) + ni * subBeatTime;
-            const toneIdx = Math.min(
-              scaleExt.length - 1,
-              pNote.scaleToneIndex + octaveOffset,
-            );
-            const rawMidi = scaleExt[toneIdx];
-            // 高すぎる耳障りな音 (MIDI > 84 / 1046Hz) を心地よいリード帯域 (C6以下) に制限
-            const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
+        // 小節ごとに徐々に連打密度を加速 (Bar 0: 4分音符4打, Bar 1: 8分音符8打, Bar 2: 8分音符8打, Bar 3: 16分音符12打 + 1拍ブレイク)
+        let stepCount = 4;
+        let stepDuration = beatTime;
+        if (b === 1 || b === 2) {
+          stepCount = 8;
+          stepDuration = subBeatTime;
+        } else if (b === 3) {
+          // サビ直前の最後の小節: 12打の高速連打のあと、最後の1拍はサビ前の静寂ブレイク（溜め）
+          stepCount = 12;
+          stepDuration = beatTime / 4;
+        }
 
-            songData.push({
-              type: "sound",
-              soundType: "melody",
-              time: noteTime,
-              note: midi,
-              played: false,
-            });
+        for (let step = 0; step < stepCount; step++) {
+          const noteTime = barStart + step * stepDuration;
+          const pNote = leadNotes[step % leadNotes.length];
+          const toneIdx = Math.min(
+            scaleExt.length - 1,
+            pNote.scaleToneIndex + octaveOffset,
+          );
+          const rawMidi = scaleExt[toneIdx];
+          const midi = rawMidi > 84 ? rawMidi - 12 : rawMidi;
 
-            // ノーツ追加: 4レーン均等分散アルゴリズム
-            const lane = selectLaneForNote(
-              noteTime,
-              toneIdx,
-              scaleExt.length,
-              lastNoteEndTimes,
-              lastAssignedLane,
-              laneUsageCount,
-            );
-            lastAssignedLane = lane;
+          songData.push({
+            type: "sound",
+            soundType: "melody",
+            time: noteTime,
+            note: midi,
+            played: false,
+          });
 
-            songData.push({
-              type: "note",
-              time: noteTime,
-              endTime: noteTime,
-              lane,
-              noteType: "normal",
-              spawned: false,
-            });
-            lastNoteEndTimes[lane] = noteTime;
-          }
+          // ノーツ追加: 4レーン均等分散アルゴリズム
+          const lane = selectLaneForNote(
+            noteTime,
+            toneIdx,
+            scaleExt.length,
+            lastNoteEndTimes,
+            lastAssignedLane,
+            laneUsageCount,
+          );
+          lastAssignedLane = lane;
+
+          songData.push({
+            type: "note",
+            time: noteTime,
+            endTime: noteTime,
+            lane,
+            noteType: "normal",
+            spawned: false,
+          });
+          lastNoteEndTimes[lane] = noteTime;
         }
       }
       return;
@@ -437,9 +459,9 @@ export function generateSong(
       const nextNoteTime = nextNote
         ? phraseStartTime + nextNote.subBeat * subBeatTime
         : phraseStartTime + 32 * subBeatTime;
-      const timeToNext = Math.max(subBeatTime, nextNoteTime - noteTime);
+      const timeToNext = Math.max(0, nextNoteTime - noteTime);
 
-      // サビでの高揚感を高めるため、小節頭の音も積極的にロングノーツへ昇格
+      // サビでの高揚感を高めるため、小節頭の音をロングノーツへ昇格
       let noteType: "normal" | "long" = pNote.noteType;
       if (
         isChorusSection &&
@@ -449,12 +471,15 @@ export function generateSong(
         noteType = "long";
       }
 
-      // ロングノーツの持続時間 (スネアドラムロールの連打感をしっかり体感できる約1.5拍)
+      // ロングノーツの持続時間: 最低でも1拍分 (beatTime * 1.0)、次の音の手前60msまでに終了
       let duration = 0;
       if (noteType === "long") {
-        duration = Math.min(
-          beatTime * 1.5,
-          Math.max(beatTime * 0.9, timeToNext - 80),
+        duration = Math.max(
+          beatTime * 1.0,
+          Math.min(
+            beatTime * 1.5,
+            timeToNext > 0 ? timeToNext - 60 : beatTime * 1.5,
+          ),
         );
       }
       const endTime = noteTime + duration;
@@ -477,7 +502,7 @@ export function generateSong(
         played: false,
       });
 
-      // ノーツの配置: 4レーン均等分散アルゴリズム
+      // 主ノーツの配置: 4レーン均等分散アルゴリズム
       const lane = selectLaneForNote(
         noteTime,
         clampedTone,
@@ -497,6 +522,38 @@ export function generateSong(
         spawned: false,
       });
       lastNoteEndTimes[lane] = endTime;
+
+      // ★ サビの小節頭 (1拍目) で美しい協和音ダブルノーツ (同時押し) を生成 ★
+      // 2音が重なる時は、不協和音にならないよう「完全オクターブ (±12半音)」の協和ハーモニーとする
+      const isDoubleNoteCandidate =
+        isChorusSection && pNote.subBeat % 8 === 0;
+      if (isDoubleNoteCandidate) {
+        // 主音に対してオクターブ上（またはオクターブ下）の完全協和音
+        const harmonyMidi = midi <= 72 ? midi + 12 : midi - 12;
+        // 反対側のレーン (0<->2, 1<->3) で叩きやすい両手同時押しを配置
+        const pairLane = lane < 2 ? lane + 2 : lane - 2;
+
+        if (noteTime >= lastNoteEndTimes[pairLane] + 90) {
+          songData.push({
+            type: "sound",
+            soundType: "melody",
+            time: noteTime,
+            note: harmonyMidi,
+            played: false,
+          });
+
+          songData.push({
+            type: "note",
+            time: noteTime,
+            endTime,
+            lane: pairLane,
+            noteType,
+            spawned: false,
+          });
+          lastNoteEndTimes[pairLane] = endTime;
+          laneUsageCount[pairLane]++;
+        }
+      }
     }
   };
 

@@ -11,6 +11,7 @@ import {
   isMutedAtom,
   maxComboAtom,
   scoreAtom,
+  songMetaAtom,
 } from "../state/atoms";
 import type { GameLayout } from "../types/game";
 
@@ -22,6 +23,7 @@ export const GameCanvas: React.FC = () => {
   const setMaxCombo = useSetAtom(maxComboAtom);
   const setBpm = useSetAtom(bpmAtom);
   const setIsMuted = useSetAtom(isMutedAtom);
+  const setSongMeta = useSetAtom(songMetaAtom);
 
   const audioEngineRef = useRef<AudioEngine | null>(null);
   const gameEngineRef = useRef<GameEngine | null>(null);
@@ -44,6 +46,7 @@ export const GameCanvas: React.FC = () => {
       onScoreChange: (s) => setScore(s),
       onComboChange: (c) => setCombo(c),
       onMaxComboChange: (mc) => setMaxCombo(mc),
+      onSongMeta: (m) => setSongMeta(m),
       onGameClear: () => setGameState("RESULT"),
     });
     gameEngineRef.current = engine;
@@ -51,7 +54,7 @@ export const GameCanvas: React.FC = () => {
     return () => {
       audio.fadeOutAndStop();
     };
-  }, [setScore, setCombo, setMaxCombo, setGameState]);
+  }, [setScore, setCombo, setMaxCombo, setSongMeta, setGameState]);
 
   // ゲームステートの変化を監視
   useEffect(() => {

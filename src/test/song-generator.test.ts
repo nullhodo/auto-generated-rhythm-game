@@ -9,6 +9,12 @@ describe("Song Generator Tests", () => {
     expect(song.bpm).toBeGreaterThanOrEqual(140);
     expect(song.bpm).toBeLessThanOrEqual(175);
 
+    // メタデータ（キー・コード進行）の検証
+    expect(song.meta.keyName).toBeTruthy();
+    expect(song.meta.scaleName).toBe("Natural Minor");
+    expect(song.meta.chordProgression).toContain("→");
+    expect(song.meta.progressionPattern).toBeTruthy();
+
     // 演奏時間検証 (32小節分)
     expect(song.songEndTime).toBeGreaterThan(0);
 

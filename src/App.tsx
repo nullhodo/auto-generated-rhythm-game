@@ -4,6 +4,7 @@ import { GameCanvas } from "./components/GameCanvas";
 import { HUD } from "./components/HUD";
 import { ResultScreen } from "./components/ResultScreen";
 import { StartScreen } from "./components/StartScreen";
+import { TrackNotification } from "./components/TrackNotification";
 import { gameStateAtom } from "./state/atoms";
 
 export const App: React.FC = () => {
@@ -29,6 +30,8 @@ export const App: React.FC = () => {
       )}
 
       {gameState === "PLAYING" && <HUD onToggleMute={handleToggleMute} />}
+
+      <TrackNotification />
 
       {gameState === "RESULT" && (
         <ResultScreen onRestart={() => setGameState("PLAYING")} />

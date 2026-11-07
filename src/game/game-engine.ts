@@ -8,6 +8,7 @@ import type {
   LaneEffect,
   Particle,
   SongEvent,
+  SongMeta,
 } from "../types/game";
 
 export const KEY_TO_LANE: Record<string, number> = {
@@ -31,6 +32,7 @@ interface GameEngineCallbacks {
   onScoreChange: (score: number) => void;
   onComboChange: (combo: number) => void;
   onMaxComboChange: (maxCombo: number) => void;
+  onSongMeta?: (meta: SongMeta) => void;
   onGameClear: () => void;
 }
 
@@ -65,6 +67,7 @@ export class GameEngine {
   public bpm = 145;
   public songEndTime = 0;
   public startTime = 0;
+  public songMeta: SongMeta | null = null;
 
   private lastHoldTickTime = 0;
   private audioEngine: AudioEngine;
@@ -80,6 +83,7 @@ export class GameEngine {
     this.songData = generated.events;
     this.bpm = generated.bpm;
     this.songEndTime = generated.songEndTime;
+    this.songMeta = generated.meta;
 
     this.score = 0;
     this.combo = 0;
@@ -92,6 +96,7 @@ export class GameEngine {
     this.callbacks.onScoreChange(0);
     this.callbacks.onComboChange(0);
     this.callbacks.onMaxComboChange(0);
+    this.callbacks.onSongMeta?.(generated.meta);
 
     this.startTime = performance.now() + 2000;
   }

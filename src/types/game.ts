@@ -73,3 +73,10 @@ export interface GameLayout {
   laneXStart: number;
   judgeLineY: number;
 }
+
+export interface SongMeta {
+  keyName: string;
+  scaleName: string;
+  progressionPattern: string;
+  chordProgression: string;
+}

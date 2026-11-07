@@ -1,10 +1,11 @@
-import type { NoteEvent, SoundEvent } from "../types/game";
+import type { NoteEvent, SongMeta, SoundEvent } from "../types/game";
 
 interface GeneratedSong {
   events: (SoundEvent | NoteEvent)[];
   bpm: number;
   songEndTime: number;
   rootNote: number;
+  meta: SongMeta;
 }
 
 export function midiToFreq(m: number): number {
@@ -12,6 +13,31 @@ export function midiToFreq(m: number): number {
 }
 
 const ROOT_NOTES = [57, 59, 60, 62, 64]; // A3, B3, C4, D4, E4
+
+const KEY_DETAILS: Record<number, { keyName: string; chords: string[] }> =
+  {
+    57: {
+      keyName: "A Minor",
+      chords: ["Am", "Bdim", "C", "Dm", "Em", "F", "G"],
+    },
+    59: {
+      keyName: "B Minor",
+      chords: ["Bm", "C#dim", "D", "Em", "F#m", "G", "A"],
+    },
+    60: {
+      keyName: "C Minor",
+      chords: ["Cm", "Ddim", "Eb", "Fm", "Gm", "Ab", "Bb"],
+    },
+    62: {
+      keyName: "D Minor",
+      chords: ["Dm", "Edim", "F", "Gm", "Am", "Bb", "C"],
+    },
+    64: {
+      keyName: "E Minor",
+      chords: ["Em", "F#dim", "G", "Am", "Bm", "C", "D"],
+    },
+  };
+
 const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
 const CHORDS = [
   [0, 2, 4], // i
@@ -22,11 +48,12 @@ const CHORDS = [
   [5, 7, 9], // VI
   [6, 8, 10], // VII
 ];
-const PROGRESSIONS = [
-  [5, 6, 0, 0], // VI - VII - i - i (小室進行風)
-  [3, 4, 0, 0], // iv - v - i - i
-  [0, 5, 2, 6], // i - VI - III - VII
-  [5, 6, 2, 0], // VI - VII - III - i
+
+const PROGRESSION_INFOS = [
+  { pattern: [5, 6, 0, 0], label: "VI - VII - i - i (小室進行風)" },
+  { pattern: [3, 4, 0, 0], label: "iv - v - i - i (EDM定番進行)" },
+  { pattern: [0, 5, 2, 6], label: "i - VI - III - VII (王道進行)" },
+  { pattern: [5, 6, 2, 0], label: "VI - VII - III - i (カノン派生進行)" },
 ];
 
 /**
@@ -48,8 +75,26 @@ export function generateSong(
     .concat(baseScale.map((i) => i + 12))
     .concat(baseScale.map((i) => i + 24));
 
-  const progIndex = Math.floor(rng() * PROGRESSIONS.length);
-  const chosenProg = PROGRESSIONS[progIndex];
+  const progIndex = Math.floor(rng() * PROGRESSION_INFOS.length);
+  const chosenProgInfo = PROGRESSION_INFOS[progIndex];
+  const chosenProg = chosenProgInfo.pattern;
+
+  // キーとコード進行のメタデータ構築
+  const keyDetail = KEY_DETAILS[rootNote] || {
+    keyName: "A Minor",
+    chords: ["Am", "Bdim", "C", "Dm", "Em", "F", "G"],
+  };
+  const chordNames = chosenProg.map(
+    (deg) => keyDetail.chords[deg] || `deg-${deg}`,
+  );
+  const chordProgressionStr = chordNames.join(" → ");
+
+  const meta: SongMeta = {
+    keyName: keyDetail.keyName,
+    scaleName: "Natural Minor",
+    progressionPattern: chosenProgInfo.label,
+    chordProgression: chordProgressionStr,
+  };
 
   const totalBars = 32;
   const songEndTime = totalBars * 4 * beatTime;
@@ -209,5 +254,6 @@ export function generateSong(
     bpm,
     songEndTime,
     rootNote,
+    meta,
   };
 }
